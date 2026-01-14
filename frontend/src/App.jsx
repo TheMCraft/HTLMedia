@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import Login from './components/Login'
 import Dashboard from './components/Dashboard'
-import AdminPanel from './components/AdminPanel'
 import './App.css'
 
 function App() {
@@ -14,7 +13,9 @@ function App() {
 
   async function checkAuthStatus() {
     try {
-      const response = await fetch('/api/user');
+      const response = await fetch('/api/user', {
+        credentials: 'include'
+      });
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
@@ -28,7 +29,10 @@ function App() {
 
   async function handleLogout() {
     try {
-      await fetch('/api/logout', { method: 'POST' });
+      await fetch('/api/logout', { 
+        method: 'POST',
+        credentials: 'include'
+      });
       setUser(null);
     } catch (error) {
       console.error('Logout Fehler:', error);
@@ -49,12 +53,8 @@ function App() {
     return <Login onLoginSuccess={checkAuthStatus} />;
   }
 
-  // Angemeldet - Dashboard oder Admin Panel zeigen
-  if (user.role === 'admin') {
-    return <AdminPanel user={user} onLogout={handleLogout} />;
-  }
-
-  return <Dashboard user={user} onLogout={handleLogout} isAdmin={false} />;
+  // Angemeldet - Dashboard mit Admin-Tab für Admins
+  return <Dashboard user={user} onLogout={handleLogout} isAdmin={user.role === 'admin'} />;
 }
 
 export default App

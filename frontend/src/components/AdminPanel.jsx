@@ -21,7 +21,9 @@ export default function AdminPanel({ user, onLogout }) {
 
   async function fetchUsers() {
     try {
-      const response = await fetch('/api/admin/users');
+      const response = await fetch('/api/admin/users', {
+        credentials: 'include'
+      });
       if (response.ok) {
         const data = await response.json();
         setUsers(data);
@@ -52,6 +54,7 @@ export default function AdminPanel({ user, onLogout }) {
       const response = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(formData)
       });
 
@@ -77,7 +80,8 @@ export default function AdminPanel({ user, onLogout }) {
 
     try {
       const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        credentials: 'include'
       });
 
       const data = await response.json();
@@ -101,6 +105,7 @@ export default function AdminPanel({ user, onLogout }) {
       const response = await fetch(`/api/admin/users/${userId}/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ newPassword })
       });
 
@@ -121,6 +126,7 @@ export default function AdminPanel({ user, onLogout }) {
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ role: newRole })
       });
 

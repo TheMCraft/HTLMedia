@@ -8,8 +8,7 @@ export default function Login({ onLoginSuccess }) {
   const [formData, setFormData] = useState({
     username: '',
     password: '',
-    confirmPassword: '',
-    email: ''
+    confirmPassword: ''
   });
 
   function handleChange(e) {
@@ -43,6 +42,7 @@ export default function Login({ onLoginSuccess }) {
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ username, password })
       });
 
@@ -60,7 +60,7 @@ export default function Login({ onLoginSuccess }) {
   }
 
   async function handleRegister() {
-    const { username, password, confirmPassword, email } = formData;
+    const { username, password, confirmPassword } = formData;
 
     if (!username || !password || !confirmPassword) {
       setMessage('❌ Alle Felder erforderlich');
@@ -81,7 +81,8 @@ export default function Login({ onLoginSuccess }) {
       const response = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, confirmPassword, email })
+        credentials: 'include',
+        body: JSON.stringify({ username, password, confirmPassword })
       });
 
       const data = await response.json();
@@ -90,7 +91,7 @@ export default function Login({ onLoginSuccess }) {
         setMessage('✓ Registrierung erfolgreich! Bitte anmelden.');
         setTimeout(() => {
           setIsLogin(true);
-          setFormData({ username, password: '', confirmPassword: '', email: '' });
+          setFormData({ username, password: '', confirmPassword: '' });
         }, 1000);
       } else {
         setMessage('❌ ' + data.error);
@@ -149,18 +150,6 @@ export default function Login({ onLoginSuccess }) {
                   name="confirmPassword"
                   placeholder="Passwort wiederholen"
                   value={formData.confirmPassword}
-                  onChange={handleChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="email">E-Mail</label>
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  placeholder="E-Mail eingeben"
-                  value={formData.email}
                   onChange={handleChange}
                 />
               </div>

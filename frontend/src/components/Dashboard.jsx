@@ -4,14 +4,33 @@ import './Dashboard.css';
 export default function Dashboard({ user, onLogout, isAdmin }) {
   const [userDetails, setUserDetails] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('profile'); // 'profile' oder 'admin'
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [message, setMessage] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({
+    username: '',
+    password: '',
+    role: 'user'
+  });
 
   useEffect(() => {
     fetchUserDetails();
   }, []);
 
+  // Lade Admin-Users wenn Admin-Tab angezeigt wird
+  useEffect(() => {
+    if (activeTab === 'admin' && isAdmin) {
+      fetchUsers();
+    }
+  }, [activeTab, isAdmin]);
+
   async function fetchUserDetails() {
     try {
-      const response = await fetch('/api/user');
+      const response = await fetch('/api/user', {
+        credentials: 'include'
+      });
       if (response.ok) {
         const data = await response.json();
         setUserDetails(data);
@@ -20,6 +39,117 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
       console.error('Fehler:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchUsers() {
+    try {
+      setAdminLoading(true);
+      const response = await fetch('/api/admin/users', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data);
+      } else {
+        setMessage('❌ Fehler beim Laden der User');
+      }
+    } catch (error) {
+      setMessage('❌ Fehler: ' + error.message);
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  function handleFormChange(e) {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  }
+
+  async function handleCreateUser(e) {
+    e.preventDefault();
+    if (!formData.username || !formData.password) {
+      setMessage('❌ Username und Passwort erforderlich');
+      return;
+    }
+    try {
+      const response = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(formData)
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setMessage('✓ User erstellt!');
+        setFormData({ username: '', password: '', role: 'user' });
+        setShowForm(false);
+        fetchUsers();
+      } else {
+        setMessage('❌ ' + data.error);
+      }
+    } catch (error) {
+      setMessage('❌ Fehler: ' + error.message);
+    }
+  }
+
+  async function handleDeleteUser(userId, username) {
+    if (!confirm(`Soll ${username} wirklich gelöscht werden?`)) return;
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setMessage('✓ User gelöscht!');
+        fetchUsers();
+      } else {
+        setMessage('❌ ' + data.error);
+      }
+    } catch (error) {
+      setMessage('❌ Fehler: ' + error.message);
+    }
+  }
+
+  async function handleResetPassword(userId) {
+    const newPassword = prompt('Neues Passwort eingeben:');
+    if (!newPassword) return;
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ newPassword })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setMessage('✓ Passwort zurückgesetzt!');
+      } else {
+        setMessage('❌ ' + data.error);
+      }
+    } catch (error) {
+      setMessage('❌ Fehler: ' + error.message);
+    }
+  }
+
+  async function handleUpdateRole(userId, newRole) {
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ role: newRole })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setMessage('✓ Role aktualisiert!');
+        fetchUsers();
+      } else {
+        setMessage('❌ ' + data.error);
+      }
+    } catch (error) {
+      setMessage('❌ Fehler: ' + error.message);
     }
   }
 
@@ -36,6 +166,25 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
     <div className="dashboard-container">
       <div className="dashboard-navbar">
         <h1>🎬 HTLMedia</h1>
+        <div className="navbar-tabs">
+          <button 
+            className={`nav-tab ${activeTab === 'profile' ? 'active' : ''}`}
+            onClick={() => setActiveTab('profile')}
+          >
+            👤 Profil
+          </button>
+          {isAdmin && (
+            <button 
+              className={`nav-tab ${activeTab === 'admin' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('admin');
+                if (users.length === 0) fetchUsers();
+              }}
+            >
+              🛡️ Admin Panel
+            </button>
+          )}
+        </div>
         <div className="navbar-right">
           <div className="user-info">
             {isAdmin && <span className="admin-badge">🛡️ Admin</span>}
@@ -46,83 +195,203 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
       </div>
 
       <div className="dashboard-content">
-        <div className="welcome-banner">
-          <h2>Willkommen, <span>{user?.username}</span>! 👋</h2>
-          <p>Sie sind erfolgreich angemeldet</p>
-        </div>
+        {activeTab === 'profile' ? (
+          <>
+            <div className="welcome-banner">
+              <h2>Willkommen, <span>{user?.username}</span>! 👋</h2>
+              <p>Sie sind erfolgreich angemeldet</p>
+            </div>
 
-        <div className="dashboard-grid">
-          <div className="card">
-            <h3>📊 Ihre Benutzerdaten</h3>
-            {loading ? (
-              <div className="loading">
-                <div className="spinner"></div>
+            <div className="dashboard-grid">
+              <div className="card">
+                <h3>📊 Ihre Benutzerdaten</h3>
+                {loading ? (
+                  <div className="loading">
+                    <div className="spinner"></div>
+                  </div>
+                ) : userDetails ? (
+                  <div className="user-details">
+                    <div className="detail-item">
+                      <span className="detail-label">👤 Benutzername</span>
+                      <span className="detail-value">{userDetails.username}</span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">🔑 Benutzer-ID</span>
+                      <span className="detail-value">{userDetails.id}</span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">👥 Role</span>
+                      <span className={`detail-value role-${userDetails.role}`}>
+                        {userDetails.role === 'admin' ? '🛡️ Admin' : '👤 User'}
+                      </span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">📅 Registriert seit</span>
+                      <span className="detail-value">{createdDate}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p>Fehler beim Laden der Daten</p>
+                )}
               </div>
-            ) : userDetails ? (
-              <div className="user-details">
-                <div className="detail-item">
-                  <span className="detail-label">👤 Benutzername</span>
-                  <span className="detail-value">{userDetails.username}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">📧 E-Mail</span>
-                  <span className="detail-value">{userDetails.email || '-'}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">🔑 Benutzer-ID</span>
-                  <span className="detail-value">{userDetails.id}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">👥 Role</span>
-                  <span className={`detail-value role-${userDetails.role}`}>
-                    {userDetails.role === 'admin' ? '🛡️ Admin' : '👤 User'}
-                  </span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">📅 Registriert seit</span>
-                  <span className="detail-value">{createdDate}</span>
+
+              <div className="card">
+                <h3>ℹ️ Systeminfo</h3>
+                <div className="info-list">
+                  <div className="info-item">
+                    <span className="info-label">🔒 Datenbankverbindung:</span>
+                    <span className="status online">● Aktiv</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">🔐 Session-Verwaltung:</span>
+                    <span className="status online">● Aktiv</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">🛡️ Sicherheit:</span>
+                    <span className="status online">● Verschlüsselt</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">📱 Responsive:</span>
+                    <span className="status online">● Unterstützt</span>
+                  </div>
                 </div>
               </div>
-            ) : (
-              <p>Fehler beim Laden der Daten</p>
+            </div>
+          </>
+        ) : (
+          // Admin Panel Tab
+          <div className="admin-panel">
+            <h2>🛡️ Admin Panel - Benutzerverwaltung</h2>
+            
+            {message && (
+              <div className={`message ${message.includes('✓') ? 'success' : 'error'}`}>
+                {message}
+              </div>
             )}
-          </div>
 
-          {isAdmin && (
-            <div className="card admin-notice">
-              <h3>🛡️ Administrator</h3>
-              <p>Sie haben Admin-Rechte und können über das Admin-Panel User verwalten.</p>
-              <ul>
-                <li>✓ User erstellen und löschen</li>
-                <li>✓ Rollen zuweisen (Admin/User)</li>
-                <li>✓ Passwörter zurücksetzen</li>
-                <li>✓ E-Mail-Adressen aktualisieren</li>
-              </ul>
-            </div>
-          )}
-
-          <div className="card">
-            <h3>ℹ️ Systeminfo</h3>
-            <div className="info-list">
-              <div className="info-item">
-                <span className="info-label">🔒 Datenbankverbindung:</span>
-                <span className="status online">● Aktiv</span>
+            <div className="admin-stats">
+              <div className="stat-card">
+                <span className="stat-number">{users.length}</span>
+                <span className="stat-label">Gesamt Benutzer</span>
               </div>
-              <div className="info-item">
-                <span className="info-label">🔐 Session-Verwaltung:</span>
-                <span className="status online">● Aktiv</span>
+              <div className="stat-card">
+                <span className="stat-number">{users.filter(u => u.role === 'admin').length}</span>
+                <span className="stat-label">Administratoren</span>
               </div>
-              <div className="info-item">
-                <span className="info-label">🛡️ Sicherheit:</span>
-                <span className="status online">● Verschlüsselt</span>
-              </div>
-              <div className="info-item">
-                <span className="info-label">📱 Responsive:</span>
-                <span className="status online">● Unterstützt</span>
+              <div className="stat-card">
+                <span className="stat-number">{users.filter(u => u.role === 'user').length}</span>
+                <span className="stat-label">Reguläre User</span>
               </div>
             </div>
+
+            <div className="admin-section">
+              <button 
+                className="btn-create-user"
+                onClick={() => setShowForm(!showForm)}
+              >
+                {showForm ? '❌ Formular schließen' : '➕ Neuen User erstellen'}
+              </button>
+
+              {showForm && (
+                <form className="create-user-form" onSubmit={handleCreateUser}>
+                  <h3>Neuen Benutzer erstellen</h3>
+                  <div className="form-group">
+                    <label>Benutzername:</label>
+                    <input
+                      type="text"
+                      name="username"
+                      value={formData.username}
+                      onChange={handleFormChange}
+                      placeholder="z.B. john_doe"
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Passwort:</label>
+                    <input
+                      type="password"
+                      name="password"
+                      value={formData.password}
+                      onChange={handleFormChange}
+                      placeholder="Mindestens 6 Zeichen"
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Role:</label>
+                    <select 
+                      name="role" 
+                      value={formData.role}
+                      onChange={handleFormChange}
+                    >
+                      <option value="user">User</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                  <button type="submit" className="btn-submit">✓ User erstellen</button>
+                </form>
+              )}
+            </div>
+
+            <div className="users-table-section">
+              <h3>Alle Benutzer</h3>
+              {adminLoading ? (
+                <div className="loading">
+                  <div className="spinner"></div>
+                </div>
+              ) : users.length > 0 ? (
+                <table className="users-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Benutzername</th>
+                      <th>Role</th>
+                      <th>Registriert</th>
+                      <th>Aktionen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map(userItem => (
+                      <tr key={userItem.id}>
+                        <td>{userItem.id}</td>
+                        <td>{userItem.username}</td>
+                        <td>
+                          <select 
+                            value={userItem.role}
+                            onChange={(e) => handleUpdateRole(userItem.id, e.target.value)}
+                            className="role-select"
+                          >
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </td>
+                        <td>{new Date(userItem.created_at).toLocaleDateString('de-DE')}</td>
+                        <td className="actions">
+                          <button 
+                            className="btn-reset"
+                            onClick={() => handleResetPassword(userItem.id)}
+                            title="Passwort zurücksetzen"
+                          >
+                            🔑 Passwort
+                          </button>
+                          <button 
+                            className="btn-delete"
+                            onClick={() => handleDeleteUser(userItem.id, userItem.username)}
+                            title="User löschen"
+                          >
+                            🗑️ Löschen
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p>Keine Benutzer gefunden</p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -14,6 +14,20 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
+// CORS & Cookies Middleware
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'http://localhost:5173');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
 // Session konfigurieren
 app.use(session({
   secret: process.env.SESSION_SECRET || 'themcraft-session-secret-2026',
@@ -21,6 +35,8 @@ app.use(session({
   saveUninitialized: true,
   cookie: { 
     secure: false,
+    httpOnly: true,
+    sameSite: 'lax',
     maxAge: 1000 * 60 * 60 * 24 // 24 Stunden
   }
 }));
@@ -101,7 +117,7 @@ app.get('/dashboard', requireLogin, (req, res) => {
 
 // Registrierung
 app.post('/api/register', async (req, res) => {
-  const { username, password, confirmPassword, email } = req.body;
+  const { username, password, confirmPassword } = req.body;
 
   if (!username || !password || password !== confirmPassword) {
     return res.status(400).json({ error: 'Ungültige Eingaben' });
@@ -113,8 +129,8 @@ app.post('/api/register', async (req, res) => {
     
     try {
       await connection.execute(
-        'INSERT INTO users (username, password, email) VALUES (?, ?, ?)',
-        [username, hashedPassword, email]
+        'INSERT INTO users (username, password) VALUES (?, ?)',
+        [username, hashedPassword]
       );
       res.json({ success: true, message: 'Registrierung erfolgreich!' });
     } finally {
@@ -196,7 +212,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     const connection = await dbPool.getConnection();
     try {
       const [users] = await connection.execute(
-        'SELECT id, username, email, role, created_at FROM users ORDER BY created_at DESC'
+        'SELECT id, username, role, created_at FROM users ORDER BY created_at DESC'
       );
       res.json(users);
     } finally {
@@ -209,7 +225,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 
 // Admin: User erstellen
 app.post('/api/admin/users', requireAdmin, async (req, res) => {
-  const { username, password, email, role } = req.body;
+  const { username, password, role } = req.body;
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Username und Passwort erforderlich' });
@@ -223,8 +239,8 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     
     try {
       const [result] = await connection.execute(
-        'INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)',
-        [username, hashedPassword, email || null, userRole]
+        'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+        [username, hashedPassword, userRole]
       );
       res.json({ 
         success: true, 
@@ -246,14 +262,14 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
 // Admin: User aktualisieren
 app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { email, role } = req.body;
+  const { role } = req.body;
 
   try {
     const connection = await dbPool.getConnection();
     try {
       await connection.execute(
-        'UPDATE users SET email = ?, role = ? WHERE id = ?',
-        [email || null, role, id]
+        'UPDATE users SET role = ? WHERE id = ?',
+        [role, id]
       );
       res.json({ success: true, message: 'User aktualisiert!' });
     } finally {
@@ -318,7 +334,7 @@ app.get('/api/user', requireLogin, async (req, res) => {
     const connection = await dbPool.getConnection();
     try {
       const [rows] = await connection.execute(
-        'SELECT id, username, email, role, created_at FROM users WHERE id = ?',
+        'SELECT id, username, role, created_at FROM users WHERE id = ?',
         [req.session.userId]
       );
       if (rows.length > 0) {
