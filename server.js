@@ -4,7 +4,6 @@ const mysql = require('mysql2/promise');
 const bodyParser = require('body-parser');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
-const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,7 +11,6 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.use(express.static('public'));
 
 // CORS & Cookies Middleware
 app.use((req, res, next) => {
@@ -96,24 +94,8 @@ function requireLogin(req, res, next) {
   }
 }
 
-// Routes
-app.get('/', (req, res) => {
-  if (req.session.userId) {
-    res.redirect('/dashboard');
-  } else {
-    res.redirect('/login');
-  }
-});
-
-// Login-Seite
-app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/login.html'));
-});
-
-// Dashboard (geschützt)
-app.get('/dashboard', requireLogin, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/dashboard.html'));
-});
+// API Routes only (React frontend handles all page rendering)
+// No HTML routes needed since React SPA handles everything on localhost:5173
 
 // Registrierung
 app.post('/api/register', async (req, res) => {

@@ -1,4 +1,4 @@
-/* Login Styles */
+/* Login Styles - Dark Mode */
 
 .login-container {
   min-height: 100vh;
@@ -10,13 +10,14 @@
 }
 
 .login-card {
-  background: white;
+  background: #2a2a2a;
   border-radius: 12px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   width: 100%;
   max-width: 400px;
   overflow: hidden;
   animation: slideUp 0.5s ease-out;
+  color: #e0e0e0;
 }
 
 @keyframes slideUp {
@@ -59,7 +60,7 @@
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  color: #333;
+  color: #e0e0e0;
   font-weight: 500;
   font-size: 14px;
 }
@@ -67,11 +68,13 @@
 .form-group input {
   width: 100%;
   padding: 12px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid #444;
   border-radius: 6px;
   font-size: 14px;
   transition: all 0.3s;
   font-family: inherit;
+  background: #333;
+  color: #e0e0e0;
 }
 
 .form-group input:focus {
@@ -100,15 +103,15 @@
 }
 
 .alert.error {
-  background: #fee;
-  color: #c33;
-  border-left: 4px solid #c33;
+  background: #5a2a2a;
+  color: #ff9999;
+  border-left: 4px solid #ff5555;
 }
 
 .alert.success {
-  background: #efe;
-  color: #3c3;
-  border-left: 4px solid #3c3;
+  background: #2a5a2a;
+  color: #99ff99;
+  border-left: 4px solid #55ff55;
 }
 
 .btn-submit {
@@ -142,7 +145,7 @@
 .toggle-form {
   text-align: center;
   font-size: 14px;
-  color: #666;
+  color: #bbb;
   padding: 0 30px 30px;
 }
 

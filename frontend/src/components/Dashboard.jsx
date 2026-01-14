@@ -48,13 +48,15 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
       const response = await fetch('/api/admin/users', {
         credentials: 'include'
       });
+      const data = await response.json();
       if (response.ok) {
-        const data = await response.json();
         setUsers(data);
+        setMessage('');
       } else {
-        setMessage('❌ Fehler beim Laden der User');
+        setMessage('❌ ' + (data.error || 'Fehler beim Laden der User'));
       }
     } catch (error) {
+      console.error('Admin users fetch error:', error);
       setMessage('❌ Fehler: ' + error.message);
     } finally {
       setAdminLoading(false);
