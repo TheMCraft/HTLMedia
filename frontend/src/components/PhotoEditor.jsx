@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import './PhotoEditor.css';
 
-export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
+export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleFontId, titleFontSize, descriptionFontId, descriptionFontSize, fonts }) {
   const canvasRef = useRef(null);
   const [imageFormat, setImageFormat] = useState(''); // 'vertical' oder 'horizontal'
   const [overlays, setOverlays] = useState([]);
@@ -24,6 +24,17 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
   const [titleY, setTitleY] = useState(20); // Y-Position des Titels
   const [fontLoaded, setFontLoaded] = useState(false); // Font ist geladen
   const [customFontName, setCustomFontName] = useState('serif'); // Name des geladenen Custom Fonts
+  
+  // Description States
+  const [descriptionInput, setDescriptionInput] = useState('');
+  const [showDescriptionInput, setShowDescriptionInput] = useState(false);
+  const [appliedDescription, setAppliedDescription] = useState(null); // {text, x, y, fontSize, font}
+  const [descriptionY, setDescriptionY] = useState(100); // Y-Position der Description
+  const [descriptionFont, setDescriptionFont] = useState({ name: 'serif', size: 60 }); // Description Font from admin
+  
+  // Title Font State
+  const [titleFont, setTitleFont] = useState({ name: 'serif', size: 70 }); // Title Font from admin
+  
   const imgRef = useRef(null);
   const canvasContainerRef = useRef(null);
 
@@ -37,24 +48,28 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
         });
         
         if (response.ok) {
-          const fonts = await response.json();
+          const availableFonts = await response.json();
+          console.log('Verfügbare Fonts:', availableFonts);
           
-          // Lade den letzten hochgeladenen Font (falls vorhanden)
-          if (fonts.length > 0) {
-            const latestFont = fonts[0];
-            // Extrahiere den Font-Namen aus dem Dateinamen (z.B. "font-1234567890.otf" -> "otf")
-            const fontExt = latestFont.filename.split('.').pop();
-            
-            const fontFace = new FontFace(fontExt, `url(${latestFont.url})`, {
-              style: 'normal',
-              weight: '400'
-            });
-            
-            await fontFace.load();
-            document.fonts.add(fontFace);
-            setCustomFontName(fontExt); // Speichere den Font-Namen für später
-            console.log(`✓ Custom Font geladen: ${fontExt}`);
-          }
+          // Lade alle verfügbaren Fonts und register sie bei document.fonts
+          const loadPromises = availableFonts.map(async (font) => {
+            try {
+              // Verwende den Dateinamen (ohne Extension) als Font-Name für Uniqueness
+              const fontName = font.filename.substring(0, font.filename.lastIndexOf('.')) || font.filename;
+              const fontFace = new FontFace(fontName, `url(${font.url})`, {
+                style: 'normal',
+                weight: '400'
+              });
+              
+              await fontFace.load();
+              document.fonts.add(fontFace);
+              console.log(`✓ Font geladen: ${fontName} (${font.url})`);
+            } catch (err) {
+              console.error(`Fehler beim Laden von ${font.filename}:`, err);
+            }
+          });
+          
+          await Promise.all(loadPromises);
         }
       } catch (error) {
         console.error('Fehler beim Laden der Custom Fonts:', error);
@@ -65,6 +80,54 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
     
     loadCustomFonts();
   }, []);
+
+  // Update description font wenn Admin settings sich ändern
+  useEffect(() => {
+    if (descriptionFontId && fonts && fonts.length > 0) {
+      const selectedFont = fonts.find(f => f.id === descriptionFontId);
+      if (selectedFont) {
+        // Verwende den gleichen Font-Namen wie in loadCustomFonts
+        const fontName = selectedFont.filename.substring(0, selectedFont.filename.lastIndexOf('.')) || selectedFont.filename;
+        setDescriptionFont({
+          name: fontName,
+          size: descriptionFontSize
+        });
+        console.log(`Description Font aktualisiert: ${fontName}, Größe: ${descriptionFontSize}`);
+      }
+    } else {
+      // Fallback wenn keine Font ausgewählt
+      setDescriptionFont({
+        name: 'serif',
+        size: descriptionFontSize
+      });
+    }
+  }, [descriptionFontId, descriptionFontSize, fonts]);
+
+  // Update title font wenn Admin settings sich ändern
+  useEffect(() => {
+    console.log('Title Font Effect triggered - titleFontId:', titleFontId, 'fonts:', fonts);
+    if (titleFontId && fonts && fonts.length > 0) {
+      const selectedFont = fonts.find(f => f.id === titleFontId);
+      console.log('Ausgewählter Font:', selectedFont);
+      if (selectedFont) {
+        // Verwende den gleichen Font-Namen wie in loadCustomFonts
+        const fontName = selectedFont.filename.substring(0, selectedFont.filename.lastIndexOf('.')) || selectedFont.filename;
+        setTitleFont({
+          name: fontName,
+          size: titleFontSize
+        });
+        console.log(`Title Font aktualisiert: ${fontName}, Größe: ${titleFontSize}`);
+      }
+    } else {
+      // Fallback wenn keine Font ausgewählt
+      console.log('Title Font Fallback zu serif');
+      setTitleFont({
+        name: 'serif',
+        size: titleFontSize
+      });
+    }
+  }, [titleFontId, titleFontSize, fonts]);
+
 
   useEffect(() => {
     const initCanvas = async () => {
@@ -144,7 +207,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
   // Canvas neu zeichnen wenn sich appliedOverlays oder imageTransform ändern
   useEffect(() => {
     redrawCanvas();
-  }, [appliedOverlays, imageTransform, appliedTitle]);
+  }, [appliedOverlays, imageTransform, appliedTitle, appliedDescription]);
 
   // Mouse Event Handler für Canvas
   useEffect(() => {
@@ -342,6 +405,12 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
           ctx.textBaseline = 'top';
           ctx.fillText(appliedTitle.text, appliedTitle.x, appliedTitle.y);
         }
+        
+        // Zeichne Description NACH Title
+        if (appliedDescription) {
+          const ctx = canvas.getContext('2d');
+          drawWrappedText(ctx, appliedDescription.text, appliedDescription.x, appliedDescription.y, canvas.width - 40, appliedDescription.fontSize, appliedDescription.font, '#FFFFFF');
+        }
       });
       return;
     }
@@ -354,6 +423,62 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       ctx.textBaseline = 'top';
       ctx.fillText(appliedTitle.text, appliedTitle.x, appliedTitle.y);
     }
+    
+    // Description zeichnen
+    if (appliedDescription) {
+      drawWrappedText(ctx, appliedDescription.text, appliedDescription.x, appliedDescription.y, canvas.width - 40, appliedDescription.fontSize, appliedDescription.font, '#FFFFFF');
+    }
+  }
+
+  function drawWrappedText(ctx, text, x, y, maxWidth, fontSize, fontFamily, color) {
+    ctx.font = `${fontSize}px ${fontFamily}`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+    
+    // Text wrapping auf maximal 2 Zeilen
+    for (let i = 0; i < words.length && lines.length < 2; i++) {
+      const testLine = currentLine + (currentLine ? ' ' : '') + words[i];
+      const metrics = ctx.measureText(testLine);
+      
+      if (metrics.width > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = words[i];
+      } else {
+        currentLine = testLine;
+      }
+      
+      // Wenn wir auf der 2. Zeile sind und noch Wörter übrig, add "..."
+      if (lines.length === 1 && i === words.length - 1) {
+        lines.push(currentLine);
+      } else if (lines.length === 1 && i < words.length - 1) {
+        const nextTest = currentLine + ' ' + words[i + 1];
+        const nextMetrics = ctx.measureText(nextTest);
+        if (nextMetrics.width > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = '';
+        }
+      }
+    }
+    
+    if (currentLine && lines.length < 2) {
+      lines.push(currentLine);
+    } else if (lines.length === 2 && currentLine) {
+      // Wenn noch Text übrig ist und wir schon 2 Zeilen haben, kürzbar-Zeichen hinzufügen
+      lines[1] = lines[1].substring(0, lines[1].length - 3) + '...';
+    }
+    
+    // Zeichne die Zeilen
+    const lineHeight = fontSize + 4;
+    const startY = y - (lines.length - 1) * lineHeight / 2;
+    
+    lines.forEach((line, index) => {
+      ctx.fillText(line, x, startY + index * lineHeight);
+    });
   }
 
   function drawBoundingBox(ctx, x, y, width, height) {
@@ -394,14 +519,40 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       text: titleInput,
       x: canvas.width / 2,
       y: titleY,
-      fontSize: 70,
-      font: `${customFontName}, serif`
+      fontSize: titleFont.size,
+      font: `${titleFont.name}, serif`
     };
 
+    console.log('Title hinzugefügt mit Font:', titleObj.font, 'Größe:', titleObj.fontSize);
     setAppliedTitle(titleObj);
     setTitleInput('');
     setShowTitleInput(false);
     setMessage('✓ Titel hinzugefügt!');
+    setTimeout(() => setMessage(''), 2000);
+    redrawCanvas();
+  }
+
+  function handleAddDescription() {
+    if (!descriptionInput.trim()) {
+      setMessage('❌ Bitte eine Beschreibung eingeben');
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const descriptionObj = {
+      text: descriptionInput,
+      x: canvas.width / 2,
+      y: descriptionY,
+      fontSize: descriptionFont.size,
+      font: `${descriptionFont.name}, serif`
+    };
+
+    setAppliedDescription(descriptionObj);
+    setDescriptionInput('');
+    setShowDescriptionInput(false);
+    setMessage('✓ Beschreibung hinzugefügt!');
     setTimeout(() => setMessage(''), 2000);
     redrawCanvas();
   }
@@ -597,6 +748,11 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText(appliedTitle.text, appliedTitle.x, appliedTitle.y);
+    }
+
+    // Description zeichnen
+    if (appliedDescription) {
+      drawWrappedText(ctx, appliedDescription.text, appliedDescription.x, appliedDescription.y, exportCanvas.width - 40, appliedDescription.fontSize, appliedDescription.font, '#FFFFFF');
     }
 
     return exportCanvas;
@@ -813,6 +969,82 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
                     className="title-slider"
                   />
                   <span className="value-display">{titleY}px von oben</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="sidebar-section">
+            <h3>📄 Beschreibung hinzufügen</h3>
+            
+            {!showDescriptionInput ? (
+              <button 
+                className="btn-add-description"
+                onClick={() => setShowDescriptionInput(true)}
+              >
+                📄 Beschreibung hinzufügen
+              </button>
+            ) : (
+              <div className="description-input-group">
+                <textarea 
+                  placeholder="Beschreibung eingeben..."
+                  value={descriptionInput}
+                  onChange={(e) => setDescriptionInput(e.target.value)}
+                  autoFocus
+                  className="description-input-field"
+                  rows="3"
+                />
+                <button 
+                  className="btn-confirm-description"
+                  onClick={handleAddDescription}
+                >
+                  ✓ Hinzufügen
+                </button>
+                <button 
+                  className="btn-cancel-description"
+                  onClick={() => {
+                    setShowDescriptionInput(false);
+                    setDescriptionInput('');
+                  }}
+                >
+                  ✕ Abbrechen
+                </button>
+              </div>
+            )}
+
+            {appliedDescription && (
+              <div className="description-display">
+                <p className="selector-label">Beschreibung:</p>
+                <div className="description-item">
+                  <span className="description-preview">{appliedDescription.text}</span>
+                  <button 
+                    className="btn-delete-description"
+                    onClick={() => {
+                      setAppliedDescription(null);
+                      redrawCanvas();
+                    }}
+                    title="Beschreibung löschen"
+                  >
+                    🗑️
+                  </button>
+                </div>
+                
+                <div className="description-controls">
+                  <p className="selector-label">Y-Position des Textes:</p>
+                  <input 
+                    type="range"
+                    min="0"
+                    max={canvasRef.current?.height || 600}
+                    value={descriptionY}
+                    onChange={(e) => {
+                      const newY = parseInt(e.target.value);
+                      setDescriptionY(newY);
+                      const updatedDescription = { ...appliedDescription, y: newY };
+                      setAppliedDescription(updatedDescription);
+                    }}
+                    className="description-slider"
+                  />
+                  <span className="value-display">{descriptionY}px von oben</span>
                 </div>
               </div>
             )}

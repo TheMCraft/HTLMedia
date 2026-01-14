@@ -1128,3 +1128,79 @@
   margin: 0;
 }
 
+/* Description Font Settings */
+.description-font-settings {
+  background: rgba(102, 126, 234, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 15px;
+}
+
+.description-font-settings h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #e0e0e0;
+  font-size: 15px;
+}
+
+.settings-group {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-group label {
+  color: #888;
+  font-size: 13px;
+  white-space: nowrap;
+  min-width: 150px;
+}
+
+.font-select {
+  flex: 1;
+  min-width: 200px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e0e0e0;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.font-select:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.font-size-slider {
+  flex: 1;
+  min-width: 150px;
+  cursor: pointer;
+}
+
+.font-size-value {
+  color: #667eea;
+  font-weight: bold;
+  margin-left: 5px;
+}
+
+/* Title Font Settings */
+.title-font-settings {
+  background: rgba(102, 126, 234, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.title-font-settings h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #e0e0e0;
+  font-size: 15px;
+}
+

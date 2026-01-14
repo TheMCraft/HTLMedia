@@ -31,6 +31,14 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
   const [uploadingFont, setUploadingFont] = useState(false);
   const [fontMessage, setFontMessage] = useState('');
 
+  // Title Font Settings
+  const [titleFontId, setTitleFontId] = useState(null);
+  const [titleFontSize, setTitleFontSize] = useState(70);
+
+  // Description Font Settings
+  const [descriptionFontId, setDescriptionFontId] = useState(null);
+  const [descriptionFontSize, setDescriptionFontSize] = useState(60);
+
   // Photo Editor States
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedPhotoForEdit, setSelectedPhotoForEdit] = useState(null);
@@ -930,6 +938,66 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
                   </div>
                 </div>
               </div>
+
+              <div className="title-font-settings">
+                <h3>📝 Titel Font Einstellungen</h3>
+                <div className="settings-group">
+                  <label>Font für Titel:</label>
+                  <select 
+                    value={titleFontId || ''}
+                    onChange={(e) => setTitleFontId(e.target.value ? parseInt(e.target.value) : null)}
+                    className="font-select"
+                  >
+                    <option value="">-- Wähle einen Font --</option>
+                    {fonts.map(font => (
+                      <option key={font.id} value={font.id}>
+                        {font.filename}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="settings-group">
+                  <label>Font-Größe: <span className="font-size-value">{titleFontSize}px</span></label>
+                  <input
+                    type="range"
+                    min="30"
+                    max="120"
+                    value={titleFontSize}
+                    onChange={(e) => setTitleFontSize(parseInt(e.target.value))}
+                    className="font-size-slider"
+                  />
+                </div>
+              </div>
+
+              <div className="description-font-settings">
+                <h3>📝 Description Font Einstellungen</h3>
+                <div className="settings-group">
+                  <label>Font für Beschreibung:</label>
+                  <select 
+                    value={descriptionFontId || ''}
+                    onChange={(e) => setDescriptionFontId(e.target.value ? parseInt(e.target.value) : null)}
+                    className="font-select"
+                  >
+                    <option value="">-- Wähle einen Font --</option>
+                    {fonts.map(font => (
+                      <option key={font.id} value={font.id}>
+                        {font.filename}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="settings-group">
+                  <label>Font-Größe: <span className="font-size-value">{descriptionFontSize}px</span></label>
+                  <input
+                    type="range"
+                    min="12"
+                    max="100"
+                    value={descriptionFontSize}
+                    onChange={(e) => setDescriptionFontSize(parseInt(e.target.value))}
+                    className="font-size-slider"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -942,6 +1010,11 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
           photoUrl={selectedPhotoForEdit.url}
           onClose={handleCloseEditor}
           onSave={handleCloseEditor}
+          titleFontId={titleFontId}
+          titleFontSize={titleFontSize}
+          descriptionFontId={descriptionFontId}
+          descriptionFontSize={descriptionFontSize}
+          fonts={fonts}
         />
       )}
     </div>

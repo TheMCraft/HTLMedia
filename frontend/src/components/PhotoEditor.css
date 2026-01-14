@@ -596,3 +596,134 @@
 .editor-sidebar {
   padding: 15px;
 }
+/* Description Input & Display */
+.btn-add-description {
+  width: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+  margin-bottom: 10px;
+}
+
+.btn-add-description:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.description-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.description-input-field {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e0e0e0;
+  padding: 10px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.description-input-field:focus {
+  outline: none;
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.btn-confirm-description,
+.btn-cancel-description {
+  padding: 8px 12px;
+  border-radius: 5px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.btn-confirm-description {
+  background: rgba(76, 175, 80, 0.3);
+  color: #4caf50;
+  border: 1px solid rgba(76, 175, 80, 0.5);
+}
+
+.btn-confirm-description:hover {
+  background: rgba(76, 175, 80, 0.4);
+  border-color: #4caf50;
+}
+
+.btn-cancel-description {
+  background: rgba(255, 76, 76, 0.2);
+  color: #ff4c4c;
+  border: 1px solid rgba(255, 76, 76, 0.5);
+}
+
+.btn-cancel-description:hover {
+  background: rgba(255, 76, 76, 0.3);
+  border-color: #ff4c4c;
+}
+
+.description-display {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 10px;
+}
+
+.description-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 5px;
+}
+
+.description-preview {
+  flex: 1;
+  color: #e0e0e0;
+  font-size: 13px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.btn-delete-description {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn-delete-description:hover {
+  color: #ff6b6b;
+  transform: scale(1.1);
+}
+
+.description-controls {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.description-slider {
+  width: 100%;
+  margin-top: 8px;
+}
