@@ -154,11 +154,13 @@ app.use(bodyParser.json());
 
 // CORS & Cookies Middleware - für ALLE Requests (API + Uploads)
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'http://localhost:5173');
+  res.header('Access-Control-Allow-Origin', 'http://localhost:4173');
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
   res.header('Access-Control-Expose-Headers', 'Content-Type, Content-Length');
+  res.header('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.header('Access-Control-Max-Age', '3600');
   
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
@@ -233,7 +235,6 @@ async function initDatabase() {
           id INT AUTO_INCREMENT PRIMARY KEY,
           username VARCHAR(50) UNIQUE NOT NULL,
           password VARCHAR(255) NOT NULL,
-          email VARCHAR(100),
           role ENUM('user', 'admin') DEFAULT 'user',
           active TINYINT DEFAULT 0,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -1,11 +1,5 @@
 /* Photo Editor Styles */
 
-@font-face {
-  font-family: 'LemonTuesday';
-  src: url('/LemonTuesday.otf') format('opentype');
-  font-display: block;
-}
-
 .photo-editor-container {
   position: fixed;
   top: 0;
