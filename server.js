@@ -48,12 +48,13 @@ const upload = multer({
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-// CORS & Cookies Middleware
+// CORS & Cookies Middleware - für ALLE Requests (API + Uploads)
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', 'http://localhost:5173');
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Expose-Headers', 'Content-Type, Content-Length');
   
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
@@ -73,6 +74,12 @@ app.use(session({
     sameSite: 'lax',
     maxAge: 1000 * 60 * 60 * 24 // 24 Stunden
   }
+}));
+
+// Static files für Uploads - MUSS VOR den API Routes sein!
+app.use('/uploads', express.static(uploadsDir, {
+  maxAge: '1d',
+  etag: false
 }));
 
 // Database Connection Pool
@@ -474,9 +481,6 @@ app.delete('/api/photos/:id', requireLogin, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-// Static files für Uploads
-app.use('/uploads', express.static(uploadsDir));
 
 // Benutzerdaten abrufen
 app.get('/api/user', requireLogin, async (req, res) => {
