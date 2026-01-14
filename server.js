@@ -235,11 +235,23 @@ async function initDatabase() {
           password VARCHAR(255) NOT NULL,
           email VARCHAR(100),
           role ENUM('user', 'admin') DEFAULT 'user',
+          active TINYINT DEFAULT 0,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
       `);
       console.log('✓ Benutzertabelle vorhanden');
+
+      // Stelle sicher, dass active Spalte existiert
+      try {
+        await conn.execute(`
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS active TINYINT DEFAULT 0
+        `);
+        console.log('✓ active Spalte in users-Tabelle vorhanden');
+      } catch (err) {
+        // Spalte existiert wahrscheinlich bereits oder andere Fehler - ignorieren
+        console.log('Hinweis: active Spalte existiert möglicherweise bereits');
+      }
 
       // Fotostabelle erstellen (falls nicht vorhanden)
       await conn.execute(`
@@ -367,7 +379,7 @@ app.post('/api/login', async (req, res) => {
     
     try {
       const [rows] = await connection.execute(
-        'SELECT id, username, password, role FROM users WHERE username = ?',
+        'SELECT id, username, password, role, active FROM users WHERE username = ?',
         [username]
       );
 
@@ -376,6 +388,12 @@ app.post('/api/login', async (req, res) => {
       }
 
       const user = rows[0];
+
+      // Überprüfe, ob Account aktiv ist
+      if (!user.active) {
+        return res.status(403).json({ error: 'Account ist nicht aktiviert. Bitte kontaktiere einen Administrator.' });
+      }
+
       const passwordMatch = await bcrypt.compare(password, user.password);
 
       if (!passwordMatch) {
@@ -421,7 +439,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     const connection = await dbPool.getConnection();
     try {
       const [users] = await connection.execute(
-        'SELECT id, username, role, created_at FROM users ORDER BY created_at DESC'
+        'SELECT id, username, role, active, created_at FROM users ORDER BY created_at DESC'
       );
       res.json(users);
     } finally {
@@ -447,9 +465,13 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const connection = await dbPool.getConnection();
     
     try {
+      // Wenn Admin erstellt wird, automatisch aktivieren
+      // Wenn User erstellt wird, bleiben sie inaktiv bis der Admin sie aktiviert
+      const isActive = (userRole === 'admin') ? 1 : 0;
+      
       const [result] = await connection.execute(
-        'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
-        [username, hashedPassword, userRole]
+        'INSERT INTO users (username, password, role, active) VALUES (?, ?, ?, ?)',
+        [username, hashedPassword, userRole, isActive]
       );
       res.json({ 
         success: true, 
@@ -471,15 +493,23 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
 // Admin: User aktualisieren
 app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { role } = req.body;
+  const { role, active } = req.body;
 
   try {
     const connection = await dbPool.getConnection();
     try {
-      await connection.execute(
-        'UPDATE users SET role = ? WHERE id = ?',
-        [role, id]
-      );
+      // Nur role updaten wenn active nicht gesetzt
+      if (active !== undefined) {
+        await connection.execute(
+          'UPDATE users SET active = ? WHERE id = ?',
+          [active ? 1 : 0, id]
+        );
+      } else if (role) {
+        await connection.execute(
+          'UPDATE users SET role = ? WHERE id = ?',
+          [role, id]
+        );
+      }
       res.json({ success: true, message: 'User aktualisiert!' });
     } finally {
       connection.release();

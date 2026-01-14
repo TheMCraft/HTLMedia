@@ -176,6 +176,27 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
     }
   }
 
+  async function handleToggleUserStatus(userId, currentStatus) {
+    const newStatus = !currentStatus;
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ active: newStatus })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setMessage(`✓ User ${newStatus ? 'aktiviert' : 'deaktiviert'}!`);
+        fetchUsers();
+      } else {
+        setMessage('❌ ' + data.error);
+      }
+    } catch (error) {
+      setMessage('❌ Fehler: ' + error.message);
+    }
+  }
+
   function handleOpenEditor(photo) {
     setSelectedPhotoForEdit(photo);
     setEditorOpen(true);
@@ -791,6 +812,7 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
                     <tr>
                       <th>ID</th>
                       <th>Benutzername</th>
+                      <th>Status</th>
                       <th>Role</th>
                       <th>Registriert</th>
                       <th>Aktionen</th>
@@ -801,6 +823,11 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
                       <tr key={userItem.id}>
                         <td>{userItem.id}</td>
                         <td>{userItem.username}</td>
+                        <td>
+                          <span className={`status-badge ${userItem.active ? 'active' : 'inactive'}`}>
+                            {userItem.active ? '✓ Aktiv' : '✕ Inaktiv'}
+                          </span>
+                        </td>
                         <td>
                           <select 
                             value={userItem.role}
@@ -813,6 +840,13 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
                         </td>
                         <td>{new Date(userItem.created_at).toLocaleDateString('de-DE')}</td>
                         <td className="actions">
+                          <button 
+                            className={`btn-toggle-status ${userItem.active ? 'deactivate' : 'activate'}`}
+                            onClick={() => handleToggleUserStatus(userItem.id, userItem.active)}
+                            title={userItem.active ? 'Deaktivieren' : 'Aktivieren'}
+                          >
+                            {userItem.active ? '⊘ Deaktiv' : '✓ Aktiv'}
+                          </button>
                           <button 
                             className="btn-reset"
                             onClick={() => handleResetPassword(userItem.id)}
