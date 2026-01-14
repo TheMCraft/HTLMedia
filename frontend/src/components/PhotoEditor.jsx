@@ -8,17 +8,35 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
   const [selectedOverlay, setSelectedOverlay] = useState(null);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
-  const [appliedOverlays, setAppliedOverlays] = useState([]); // [{id}]
+  const [appliedOverlays, setAppliedOverlays] = useState([]); // [{id, x, y, scale}]
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [photoVersions, setPhotoVersions] = useState([]); // Alle Versionen des Fotos
   const [currentVersionIndex, setCurrentVersionIndex] = useState(0);
+  const [selectedElementIndex, setSelectedElementIndex] = useState(-1); // -1 = Bild, 0+ = Overlay-Index
+  const [imageTransform, setImageTransform] = useState({ x: 0, y: 0, scale: 1 }); // Position und Größe des Bildes
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragMode, setDragMode] = useState(null); // 'move' oder 'resize'
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const imgRef = useRef(null);
+  const canvasContainerRef = useRef(null);
 
-  // Canvas initialisieren
+  // Canvas initialisieren und alle Versionen laden
   useEffect(() => {
     const initCanvas = async () => {
       try {
+        // Lade alle Versionen dieses Fotos
+        const response = await fetch('/api/photos', {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const allPhotos = await response.json();
+          // Finde alle Versionen mit der gleichen ID
+          const versions = allPhotos.filter(p => p.id === photoId || p.original_filename === allPhotos.find(ph => ph.id === photoId)?.original_filename);
+          setPhotoVersions(versions.sort((a, b) => a.version - b.version));
+          setCurrentVersionIndex(versions.length - 1); // Starte mit der neuesten Version
+        }
+        
         const canvas = canvasRef.current;
         if (!canvas) return;
 
@@ -67,7 +85,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
     };
 
     initCanvas();
-  }, [photoUrl]);
+  }, [photoUrl, photoId]);
 
   // Overlays laden (nur für erkanntes Format)
   useEffect(() => {
@@ -76,10 +94,128 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
     }
   }, [imageFormat]);
 
-  // Canvas neu zeichnen wenn sich appliedOverlays ändern
+  // Canvas neu zeichnen wenn sich appliedOverlays oder imageTransform ändern
   useEffect(() => {
     redrawCanvas();
-  }, [appliedOverlays]);
+  }, [appliedOverlays, imageTransform]);
+
+  // Mouse Event Handler für Canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const getElementBounds = () => {
+      if (selectedElementIndex === -1) {
+        // Bild
+        if (!imgRef.current) return null;
+        return {
+          x: imageTransform.x,
+          y: imageTransform.y,
+          width: imgRef.current.width * imageTransform.scale,
+          height: imgRef.current.height * imageTransform.scale
+        };
+      } else {
+        // Overlay
+        const overlay = appliedOverlays[selectedElementIndex];
+        const overlayData = overlays.find(o => o.id === overlay.id);
+        if (!overlayData) return null;
+        
+        return {
+          x: overlay.x || 0,
+          y: overlay.y || 0,
+          width: 200 * (overlay.scale || 1), // Placeholder für Overlay-Breite
+          height: 150 * (overlay.scale || 1)  // Placeholder für Overlay-Höhe
+        };
+      }
+    };
+
+    const handleMouseDown = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      const bounds = getElementBounds();
+      if (!bounds) return;
+
+      const resizeHandleSize = 20;
+      const isResizeHandle = 
+        x >= bounds.x + bounds.width - resizeHandleSize &&
+        x <= bounds.x + bounds.width &&
+        y >= bounds.y + bounds.height - resizeHandleSize &&
+        y <= bounds.y + bounds.height;
+
+      const isInsideBounds = 
+        x >= bounds.x && 
+        x <= bounds.x + bounds.width &&
+        y >= bounds.y && 
+        y <= bounds.y + bounds.height;
+
+      if (isInsideBounds) {
+        setIsDragging(true);
+        setDragMode(isResizeHandle ? 'resize' : 'move');
+        setDragStart({ x, y });
+      }
+    };
+
+    const handleMouseMove = (e) => {
+      if (!isDragging) {
+        // Cursor ändern wenn über Resize-Handle
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const bounds = getElementBounds();
+        
+        if (bounds) {
+          const resizeHandleSize = 20;
+          const isResizeHandle = 
+            x >= bounds.x + bounds.width - resizeHandleSize &&
+            x <= bounds.x + bounds.width &&
+            y >= bounds.y + bounds.height - resizeHandleSize &&
+            y <= bounds.y + bounds.height;
+          
+          canvas.style.cursor = isResizeHandle ? 'nwse-resize' : (
+            x >= bounds.x && x <= bounds.x + bounds.width &&
+            y >= bounds.y && y <= bounds.y + bounds.height ? 'move' : 'default'
+          );
+        }
+        return;
+      }
+
+      const currentX = e.clientX - canvas.getBoundingClientRect().left;
+      const currentY = e.clientY - canvas.getBoundingClientRect().top;
+      const deltaX = currentX - dragStart.x;
+      const deltaY = currentY - dragStart.y;
+
+      if (dragMode === 'move') {
+        updateSelectedElement({
+          x: (selectedElementIndex === -1 ? imageTransform.x : appliedOverlays[selectedElementIndex]?.x || 0) + deltaX,
+          y: (selectedElementIndex === -1 ? imageTransform.y : appliedOverlays[selectedElementIndex]?.y || 0) + deltaY
+        });
+      } else if (dragMode === 'resize') {
+        const maxDelta = Math.max(deltaX, deltaY);
+        const currentScale = selectedElementIndex === -1 ? imageTransform.scale : (appliedOverlays[selectedElementIndex]?.scale || 1);
+        const newScale = Math.max(0.1, currentScale + maxDelta / 100);
+        updateSelectedElement({ scale: newScale });
+      }
+
+      setDragStart({ x: currentX, y: currentY });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setDragMode(null);
+    };
+
+    canvas.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      canvas.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [selectedElementIndex, imageTransform, appliedOverlays, overlays, isDragging, dragMode, dragStart]);
 
   async function fetchOverlays(format) {
     try {
@@ -103,20 +239,41 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
     if (!canvas || !imgRef.current) return;
 
     const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Bild als Basis zeichnen
-    ctx.drawImage(imgRef.current, 0, 0, canvas.width, canvas.height);
+    // Bild mit Transform zeichnen
+    if (imgRef.current) {
+      const img = imgRef.current;
+      const scaledWidth = img.width * imageTransform.scale;
+      const scaledHeight = img.height * imageTransform.scale;
+      ctx.drawImage(img, imageTransform.x, imageTransform.y, scaledWidth, scaledHeight);
+      
+      // Bounding Box zeichnen wenn Bild ausgewählt ist
+      if (selectedElementIndex === -1) {
+        drawBoundingBox(ctx, imageTransform.x, imageTransform.y, scaledWidth, scaledHeight);
+      }
+    }
 
     // Overlays überlagern - mit Promise.all für korrektes Rendering
     if (appliedOverlays.length > 0) {
-      const imagePromises = appliedOverlays.map(overlay => {
+      const imagePromises = appliedOverlays.map((overlay, index) => {
         return new Promise((resolve) => {
           const overlayData = overlays.find(o => o.id === overlay.id);
           if (overlayData) {
             const overlayImg = new Image();
             overlayImg.crossOrigin = 'anonymous';
             overlayImg.onload = () => {
-              ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
+              const scaledWidth = overlayImg.width * (overlay.scale || 1);
+              const scaledHeight = overlayImg.height * (overlay.scale || 1);
+              const x = overlay.x || 0;
+              const y = overlay.y || 0;
+              ctx.drawImage(overlayImg, x, y, scaledWidth, scaledHeight);
+              
+              // Bounding Box zeichnen wenn dieses Overlay ausgewählt ist
+              if (selectedElementIndex === index) {
+                drawBoundingBox(ctx, x, y, scaledWidth, scaledHeight);
+              }
+              
               resolve();
             };
             overlayImg.onerror = () => {
@@ -136,6 +293,31 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
     }
   }
 
+  function drawBoundingBox(ctx, x, y, width, height) {
+    const borderColor = '#667eea';
+    const borderWidth = 2;
+    const handleSize = 20;
+    
+    // Rahmen zeichnen
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = borderWidth;
+    ctx.strokeRect(x, y, width, height);
+    
+    // Resize-Handle (unten rechts)
+    ctx.fillStyle = borderColor;
+    ctx.fillRect(x + width - handleSize, y + height - handleSize, handleSize, handleSize);
+    
+    // Diagonal-Striche im Handle
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x + width - handleSize + 2 + i * 5, y + height - 2);
+      ctx.lineTo(x + width - 2, y + height - handleSize + 2 + i * 5);
+      ctx.stroke();
+    }
+  }
+
   async function handleAddOverlay() {
     if (!selectedOverlay) return;
 
@@ -145,25 +327,73 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       const overlay = overlays.find(o => o.id === selectedOverlay);
       if (!overlay) return;
 
-      // Neues Overlay hinzufügen
-      const newOverlay = {
-        id: selectedOverlay
-      };
+      // Lade das Overlay-Bild um die Dimensionen zu erhalten
+      const overlayImg = new Image();
+      overlayImg.crossOrigin = 'anonymous';
+      overlayImg.onload = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
 
-      const newOverlays = [...appliedOverlays, newOverlay];
-      setAppliedOverlays(newOverlays);
-      
-      // History speichern
-      const newHistory = history.slice(0, historyIndex + 1);
-      newHistory.push(JSON.stringify(newOverlays));
-      setHistory(newHistory);
-      setHistoryIndex(newHistory.length - 1);
-      
-      // Canvas sofort neu zeichnen
-      redrawCanvas();
-      
-      setMessage('✓ Overlay hinzugefügt!');
-      setTimeout(() => setMessage(''), 2000);
+        // Canvas bekommt die VOLLE Größe des Overlays (keine Skalierung)
+        const canvasWidth = overlayImg.width;
+        const canvasHeight = overlayImg.height;
+
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        // Skaliere das Basis-Bild auf die WIDTH des Canvas
+        if (imgRef.current) {
+          const img = imgRef.current;
+          // Skalierung basiert auf der Canvas-Breite
+          const imgScale = canvasWidth / img.width;
+          const scaledHeight = img.height * imgScale;
+          
+          // Für horizontal Overlays: Bild-Position bei (0, 1350)
+          // Für vertikal Overlays: Bild zentriert
+          let imgX = 0;
+          let imgY = 0;
+          
+          if (imageFormat === 'horizontal') {
+            // Horizontal: Oberste linke Ecke bei (0, 1350)
+            imgX = 0;
+            imgY = 1350;
+          } else {
+            // Vertikal: Zentriert
+            imgX = 0;
+            imgY = (canvasHeight - scaledHeight) / 2;
+          }
+          
+          setImageTransform({
+            x: imgX,
+            y: imgY,
+            scale: imgScale
+          });
+        }
+
+        // Neues Overlay hinzufügen mit scale 1 (volle Größe)
+        const newOverlay = {
+          id: selectedOverlay,
+          x: 0,
+          y: 0,
+          scale: 1
+        };
+
+        const newOverlays = [...appliedOverlays, newOverlay];
+        setAppliedOverlays(newOverlays);
+        
+        // History speichern
+        const newHistory = history.slice(0, historyIndex + 1);
+        newHistory.push(JSON.stringify(newOverlays));
+        setHistory(newHistory);
+        setHistoryIndex(newHistory.length - 1);
+        
+        setMessage('✓ Overlay hinzugefügt und Bild skaliert!');
+        setTimeout(() => setMessage(''), 2000);
+      };
+      overlayImg.onerror = () => {
+        setMessage('❌ Fehler beim Laden des Overlays');
+      };
+      overlayImg.src = overlay.url;
     } catch (error) {
       setMessage('❌ Fehler beim Hinzufügen des Overlays');
       console.error(error);
@@ -171,16 +401,26 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
   }
 
   function undo() {
+    // Wenn wir noch Overlay-History haben, gehe durch die Overlays
     if (historyIndex > 0) {
       const newIndex = historyIndex - 1;
       loadFromHistory(newIndex);
+    } else if (currentVersionIndex > 0) {
+      // Sonst gehe zur vorherigen Photo-Version
+      const newIndex = currentVersionIndex - 1;
+      loadVersionHistory(newIndex);
     }
   }
 
   function redo() {
+    // Wenn wir noch Overlay-History haben, gehe durch die Overlays
     if (historyIndex < history.length - 1) {
       const newIndex = historyIndex + 1;
       loadFromHistory(newIndex);
+    } else if (currentVersionIndex < photoVersions.length - 1) {
+      // Sonst gehe zur nächsten Photo-Version
+      const newIndex = currentVersionIndex + 1;
+      loadVersionHistory(newIndex);
     }
   }
 
@@ -193,15 +433,128 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
     }, 50);
   }
 
+  function loadVersionHistory(index) {
+    if (photoVersions[index]) {
+      setCurrentVersionIndex(index);
+      setHistory([]);
+      setHistoryIndex(-1);
+      setAppliedOverlays([]);
+      
+      const version = photoVersions[index];
+      const newPhotoUrl = `http://localhost:${window.location.hostname === 'localhost' ? '3000' : window.location.host}/uploads/${version.filename}`;
+      
+      // Lade das Bild neu
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        imgRef.current = img;
+        redrawCanvas();
+        setMessage(`✓ Version ${version.version} geladen`);
+        setTimeout(() => setMessage(''), 2000);
+      };
+      img.src = newPhotoUrl;
+    }
+  }
+
+  function updateSelectedElement(changes) {
+    if (selectedElementIndex === -1) {
+      // Bild ist ausgewählt
+      setImageTransform(prev => ({ ...prev, ...changes }));
+    } else {
+      // Overlay ist ausgewählt
+      const newOverlays = [...appliedOverlays];
+      newOverlays[selectedElementIndex] = { ...newOverlays[selectedElementIndex], ...changes };
+      setAppliedOverlays(newOverlays);
+    }
+  }
+
+  function handleMoveUp() {
+    updateSelectedElement({ y: (selectedElementIndex === -1 ? imageTransform.y : appliedOverlays[selectedElementIndex]?.y || 0) - 10 });
+  }
+
+  function handleMoveDown() {
+    updateSelectedElement({ y: (selectedElementIndex === -1 ? imageTransform.y : appliedOverlays[selectedElementIndex]?.y || 0) + 10 });
+  }
+
+  function handleMoveLeft() {
+    updateSelectedElement({ x: (selectedElementIndex === -1 ? imageTransform.x : appliedOverlays[selectedElementIndex]?.x || 0) - 10 });
+  }
+
+  function handleMoveRight() {
+    updateSelectedElement({ x: (selectedElementIndex === -1 ? imageTransform.x : appliedOverlays[selectedElementIndex]?.x || 0) + 10 });
+  }
+
+  function handleZoomIn() {
+    const currentScale = selectedElementIndex === -1 ? imageTransform.scale : (appliedOverlays[selectedElementIndex]?.scale || 1);
+    updateSelectedElement({ scale: currentScale + 0.1 });
+  }
+
+  function handleZoomOut() {
+    const currentScale = selectedElementIndex === -1 ? imageTransform.scale : (appliedOverlays[selectedElementIndex]?.scale || 1);
+    if (currentScale > 0.1) {
+      updateSelectedElement({ scale: Math.max(0.1, currentScale - 0.1) });
+    }
+  }
+
+  async function exportCanvasWithoutSelection() {
+    // Erstelle ein neues Canvas ohne die Bounding Box
+    const originalCanvas = canvasRef.current;
+    if (!originalCanvas) return null;
+
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = originalCanvas.width;
+    exportCanvas.height = originalCanvas.height;
+    const ctx = exportCanvas.getContext('2d');
+
+    // Zeichne alles neu ohne Bounding Box
+    ctx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+    // Bild zeichnen
+    if (imgRef.current) {
+      const img = imgRef.current;
+      const scaledWidth = img.width * imageTransform.scale;
+      const scaledHeight = img.height * imageTransform.scale;
+      ctx.drawImage(img, imageTransform.x, imageTransform.y, scaledWidth, scaledHeight);
+    }
+
+    // Overlays zeichnen
+    if (appliedOverlays.length > 0) {
+      const imagePromises = appliedOverlays.map((overlay) => {
+        return new Promise((resolve) => {
+          const overlayData = overlays.find(o => o.id === overlay.id);
+          if (overlayData) {
+            const overlayImg = new Image();
+            overlayImg.crossOrigin = 'anonymous';
+            overlayImg.onload = () => {
+              const scaledWidth = overlayImg.width * (overlay.scale || 1);
+              const scaledHeight = overlayImg.height * (overlay.scale || 1);
+              const x = overlay.x || 0;
+              const y = overlay.y || 0;
+              ctx.drawImage(overlayImg, x, y, scaledWidth, scaledHeight);
+              resolve();
+            };
+            overlayImg.src = overlayData.url;
+          } else {
+            resolve();
+          }
+        });
+      });
+
+      await Promise.all(imagePromises);
+    }
+
+    return exportCanvas;
+  }
+
   async function handleSaveVersion() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const exportCanvas = await exportCanvasWithoutSelection();
+    if (!exportCanvas) return;
 
     setSaving(true);
     setMessage('⏳ Version wird gespeichert...');
 
     try {
-      canvas.toBlob(async (blob) => {
+      exportCanvas.toBlob(async (blob) => {
         const formData = new FormData();
         formData.append('photo', blob);
         formData.append('originalPhotoId', photoId);
@@ -215,6 +568,44 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
         const data = await response.json();
         if (response.ok) {
           setMessage('✓ Version gespeichert!');
+          setTimeout(() => {
+            if (onSave) onSave();
+            onClose();
+          }, 1500);
+        } else {
+          setMessage('❌ ' + (data.error || 'Fehler beim Speichern'));
+          setSaving(false);
+        }
+      }, 'image/png');
+    } catch (error) {
+      setMessage('❌ Fehler: ' + error.message);
+      setSaving(false);
+    }
+  }
+
+  async function handleFinishVersion() {
+    const exportCanvas = await exportCanvasWithoutSelection();
+    if (!exportCanvas) return;
+
+    setSaving(true);
+    setMessage('⏳ Wird als fertig markiert...');
+
+    try {
+      exportCanvas.toBlob(async (blob) => {
+        const formData = new FormData();
+        formData.append('photo', blob);
+        formData.append('originalPhotoId', photoId);
+        formData.append('finished', 'true');
+
+        const response = await fetch('/api/photos/version', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          setMessage('✓ Bild als fertig markiert!');
           setTimeout(() => {
             if (onSave) onSave();
             onClose();
@@ -295,13 +686,61 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
           </div>
 
           <div className="sidebar-section">
-            <h3>↩️ Bearbeiten</h3>
+            <h3>🎯 Positionierung</h3>
+            
+            <div className="position-selector">
+              <p className="selector-label">Auswahl:</p>
+              <button 
+                className={`selector-btn ${selectedElementIndex === -1 ? 'active' : ''}`}
+                onClick={() => setSelectedElementIndex(-1)}
+              >
+                📷 Bild
+              </button>
+              {appliedOverlays.map((_, idx) => (
+                <button 
+                  key={idx}
+                  className={`selector-btn ${selectedElementIndex === idx ? 'active' : ''}`}
+                  onClick={() => setSelectedElementIndex(idx)}
+                >
+                  🎨 Overlay {idx + 1}
+                </button>
+              ))}
+            </div>
+
+            <p className="selector-label">Bewegen:</p>
+            <div className="arrow-buttons">
+              <button className="arrow-btn up" onClick={handleMoveUp} title="Nach oben">▲</button>
+              <div className="arrow-sides">
+                <button className="arrow-btn left" onClick={handleMoveLeft} title="Nach links">◀</button>
+                <button className="arrow-btn right" onClick={handleMoveRight} title="Nach rechts">▶</button>
+              </div>
+              <button className="arrow-btn down" onClick={handleMoveDown} title="Nach unten">▼</button>
+            </div>
+
+            <p className="selector-label">Größe:</p>
+            <div className="zoom-buttons">
+              <button className="zoom-btn" onClick={handleZoomOut} title="Verkleinern">−</button>
+              <span className="zoom-value">{Math.round((selectedElementIndex === -1 ? imageTransform.scale : (appliedOverlays[selectedElementIndex]?.scale || 1)) * 100)}%</span>
+              <button className="zoom-btn" onClick={handleZoomIn} title="Vergrößern">+</button>
+            </div>
+          </div>
+
+          <div className="sidebar-section">
+            <h3>↩️ Versionen & Bearbeitung</h3>
+            
+            {photoVersions.length > 1 && (
+              <div className="version-info">
+                <span className="version-badge">
+                  Version {photoVersions[currentVersionIndex]?.version || 1} von {photoVersions.length}
+                </span>
+              </div>
+            )}
             
             <div className="history-buttons">
               <button 
                 className="btn-history"
                 onClick={undo}
-                disabled={historyIndex <= 0}
+                disabled={historyIndex <= 0 && currentVersionIndex <= 0}
                 title="Rückgängig"
               >
                 ↶ Undo
@@ -309,7 +748,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
               <button 
                 className="btn-history"
                 onClick={redo}
-                disabled={historyIndex >= history.length - 1}
+                disabled={historyIndex >= history.length - 1 && currentVersionIndex >= photoVersions.length - 1}
                 title="Wiederherstellen"
               >
                 ↷ Redo
@@ -326,6 +765,14 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
               disabled={saving}
             >
               {saving ? '⏳ Wird gespeichert...' : '✓ Speichern'}
+            </button>
+
+            <button 
+              className="btn-finish-version"
+              onClick={handleFinishVersion}
+              disabled={saving}
+            >
+              {saving ? '⏳ Wird abgeschlossen...' : '✓ Als fertig markieren'}
             </button>
 
             <p className="save-info">

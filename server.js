@@ -169,12 +169,21 @@ async function initDatabase() {
           mime_type VARCHAR(50) NOT NULL,
           size INT NOT NULL,
           version INT DEFAULT 1,
+          finished TINYINT DEFAULT 0,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
           INDEX (user_id)
         )
       `);
       console.log('✓ Fotostabelle vorhanden');
+
+      // Stelle sicher, dass finished Spalte existiert
+      await conn.execute(`
+        ALTER TABLE photos ADD COLUMN IF NOT EXISTS finished TINYINT DEFAULT 0
+      `).catch(() => {
+        // Spalte existiert wahrscheinlich bereits, ignorieren
+      });
+
 
       // Overlays-Tabelle erstellen (falls nicht vorhanden)
       await conn.execute(`
@@ -428,13 +437,14 @@ app.get('/api/photos', requireLogin, async (req, res) => {
     const connection = await dbPool.getConnection();
     try {
       const [photos] = await connection.execute(
-        'SELECT id, filename, original_filename, version, created_at FROM photos WHERE user_id = ? ORDER BY created_at DESC',
+        'SELECT id, filename, original_filename, version, finished, created_at FROM photos WHERE user_id = ? ORDER BY created_at DESC',
         [req.session.userId]
       );
       
       // Füge URL hinzu (vollständige URL für CORS/Fabric)
       const photosWithUrl = photos.map(photo => ({
         ...photo,
+        finished: photo.finished === 1,
         url: `http://localhost:${process.env.PORT || 3000}/uploads/${photo.filename}`
       }));
       
@@ -530,24 +540,29 @@ app.post('/api/photos/version', requireLogin, upload.single('photo'), async (req
       const originalPhoto = originalPhotos[0];
       const newVersion = (originalPhoto.version || 1) + 1;
 
+      // Check if this is a finish operation
+      const isFinished = req.body.finished === 'true';
+
       // Neue Version speichern
       await connection.execute(
-        'INSERT INTO photos (user_id, filename, original_filename, mime_type, size, version) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO photos (user_id, filename, original_filename, mime_type, size, version, finished) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [
           req.session.userId,
           req.file.filename,
           originalPhoto.original_filename,
           req.file.mimetype,
           req.file.size,
-          newVersion
+          newVersion,
+          isFinished ? 1 : 0
         ]
       );
 
       res.json({
         success: true,
-        message: `Neue Version (${newVersion}) gespeichert!`,
+        message: isFinished ? `Bild als fertig markiert!` : `Neue Version (${newVersion}) gespeichert!`,
         filename: req.file.filename,
-        version: newVersion
+        version: newVersion,
+        finished: isFinished
       });
     } finally {
       connection.release();

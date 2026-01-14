@@ -249,6 +249,23 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
     }
   }
 
+  function handleDownloadPhoto(photo) {
+    const filename = photo.filename;
+    const originalFilename = photo.original_filename;
+    
+    // Verwende die URL aus den Foto-Daten oder baue sie aus dem filename auf
+    const downloadUrl = photo.url || `http://localhost:3000/uploads/${filename}`;
+    
+    // Erstelle einen Link zum Download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `${originalFilename.replace(/\.[^/.]+$/, '')}-v${photo.version}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+
   // ===================== OVERLAY FUNCTIONS =====================
 
   async function fetchOverlays() {
@@ -452,13 +469,29 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
                         <div className="photo-meta">
                           <span className="meta-label">Datum:</span> {new Date(photo.created_at).toLocaleDateString('de-DE')}
                         </div>
-                        <button 
-                          className="btn-delete-photo"
-                          onClick={() => handleDeletePhoto(photo.id)}
-                          title="Foto löschen"
-                        >
-                          🗑️ Löschen
-                        </button>
+                        {photo.finished && (
+                          <div className="photo-meta" style={{color: '#9c27b0', fontWeight: 'bold'}}>
+                            ✓ Fertig markiert
+                          </div>
+                        )}
+                        <div className="photo-actions">
+                          {photo.finished && (
+                            <button 
+                              className="btn-download-photo"
+                              onClick={() => handleDownloadPhoto(photo)}
+                              title="Fertiges Foto herunterladen"
+                            >
+                              ⬇️ Herunterladen
+                            </button>
+                          )}
+                          <button 
+                            className="btn-delete-photo"
+                            onClick={() => handleDeletePhoto(photo.id)}
+                            title="Foto löschen"
+                          >
+                            🗑️ Löschen
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
