@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTLMedia - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar h1 {
+            font-size: 24px;
+        }
+
+        .navbar-right {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .user-info {
+            font-size: 14px;
+        }
+
+        .logout-btn {
+            padding: 8px 15px;
+            background: white;
+            color: #667eea;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .logout-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 22px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .user-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .detail-item {
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+
+        .detail-label {
+            color: #999;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .detail-value {
+            color: #333;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert.error {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+
+        .alert.success {
+            background: #efe;
+            color: #3c3;
+            border: 1px solid #cfc;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .welcome-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .welcome-banner h2 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            color: white;
+            border: none;
+            padding: 0;
+        }
+
+        .welcome-banner p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>🎬 HTLMedia</h1>
+        <div class="navbar-right">
+            <div class="user-info">
+                Angemeldet als: <strong id="usernameDisplay">-</strong>
+            </div>
+            <button class="logout-btn" onclick="handleLogout()">Abmelden</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="welcome-banner">
+            <h2>Willkommen, <span id="usernameBanner">Benutzer</span>! 👋</h2>
+            <p>Sie sind erfolgreich angemeldet</p>
+        </div>
+
+        <div class="card">
+            <h2>📊 Ihre Benutzerdaten</h2>
+            <div id="alertContainer"></div>
+            <div id="userDetailsContainer" class="loading">
+                <div class="spinner"></div>
+                <p>Daten werden geladen...</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>ℹ️ Informationen</h2>
+            <p>HTLMedia ist eine sichere Plattform mit verschlüsselten Datenbankverbindungen und Benutzerauthentifizierung.</p>
+            <p style="margin-top: 15px; color: #999; font-size: 14px;">
+                Datenbankverbindung: <strong>Verschlüsselt</strong> | 
+                Sitzungsmanagement: <strong>Aktiv</strong>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        async function loadUserData() {
+            const container = document.getElementById('userDetailsContainer');
+            const alertContainer = document.getElementById('alertContainer');
+
+            try {
+                const response = await fetch('/api/user');
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    throw new Error('Fehler beim Laden der Daten');
+                }
+
+                const user = await response.json();
+
+                document.getElementById('usernameDisplay').textContent = user.username;
+                document.getElementById('usernameBanner').textContent = user.username;
+
+                const createdDate = new Date(user.created_at).toLocaleDateString('de-DE', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                container.innerHTML = `
+                    <div class="user-details">
+                        <div class="detail-item">
+                            <div class="detail-label">👤 Benutzername</div>
+                            <div class="detail-value">${escapeHtml(user.username)}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">📧 E-Mail</div>
+                            <div class="detail-value">${user.email ? escapeHtml(user.email) : '-'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">🔑 Benutzer-ID</div>
+                            <div class="detail-value">${user.id}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">📅 Registriert seit</div>
+                            <div class="detail-value">${createdDate}</div>
+                        </div>
+                    </div>
+                `;
+
+                alertContainer.innerHTML = '<div class="alert success">✓ Daten erfolgreich geladen</div>';
+            } catch (error) {
+                container.innerHTML = '<div class="alert error">❌ Fehler beim Laden der Daten: ' + error.message + '</div>';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function handleLogout() {
+            if (!confirm('Möchten Sie sich wirklich abmelden?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/logout', { method: 'POST' });
+
+                if (response.ok) {
+                    window.location.href = '/login';
+                } else {
+                    alert('Abmeldung fehlgeschlagen');
+                }
+            } catch (error) {
+                alert('Fehler: ' + error.message);
+            }
+        }
+
+        // Daten beim Laden der Seite abrufen
+        loadUserData();
+    </script>
+</body>
+</html>

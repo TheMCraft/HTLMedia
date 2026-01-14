@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTLMedia - Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="email"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        input[type="email"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .toggle-form {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .toggle-form a {
+            color: #667eea;
+            cursor: pointer;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .toggle-form a:hover {
+            text-decoration: underline;
+        }
+
+        .alert {
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .alert.error {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+            display: block;
+        }
+
+        .alert.success {
+            background: #efe;
+            color: #3c3;
+            border: 1px solid #cfc;
+            display: block;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>HTLMedia</h1>
+            <p>Willkommen</p>
+        </div>
+
+        <div class="content">
+            <!-- Login Form -->
+            <div id="loginForm">
+                <div class="alert error" id="loginError"></div>
+                <div class="alert success" id="loginSuccess"></div>
+
+                <div class="form-group">
+                    <label for="loginUsername">Benutzername</label>
+                    <input type="text" id="loginUsername" placeholder="Benutzername eingeben">
+                </div>
+
+                <div class="form-group">
+                    <label for="loginPassword">Passwort</label>
+                    <input type="password" id="loginPassword" placeholder="Passwort eingeben">
+                </div>
+
+                <button onclick="handleLogin()">Anmelden</button>
+
+                <div class="toggle-form">
+                    Noch kein Konto? <a onclick="toggleForm()">Jetzt registrieren</a>
+                </div>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerForm" class="hidden">
+                <div class="alert error" id="registerError"></div>
+                <div class="alert success" id="registerSuccess"></div>
+
+                <div class="form-group">
+                    <label for="regUsername">Benutzername</label>
+                    <input type="text" id="regUsername" placeholder="Benutzername wählen">
+                </div>
+
+                <div class="form-group">
+                    <label for="regEmail">E-Mail</label>
+                    <input type="email" id="regEmail" placeholder="E-Mail eingeben">
+                </div>
+
+                <div class="form-group">
+                    <label for="regPassword">Passwort</label>
+                    <input type="password" id="regPassword" placeholder="Sicheres Passwort">
+                </div>
+
+                <div class="form-group">
+                    <label for="regConfirmPassword">Passwort bestätigen</label>
+                    <input type="password" id="regConfirmPassword" placeholder="Passwort wiederholen">
+                </div>
+
+                <button onclick="handleRegister()">Registrieren</button>
+
+                <div class="toggle-form">
+                    Bereits registriert? <a onclick="toggleForm()">Hier anmelden</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleForm() {
+            document.getElementById('loginForm').classList.toggle('hidden');
+            document.getElementById('registerForm').classList.toggle('hidden');
+            clearMessages();
+        }
+
+        function clearMessages() {
+            document.getElementById('loginError').textContent = '';
+            document.getElementById('loginSuccess').textContent = '';
+            document.getElementById('registerError').textContent = '';
+            document.getElementById('registerSuccess').textContent = '';
+        }
+
+        async function handleLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const loginError = document.getElementById('loginError');
+            const loginSuccess = document.getElementById('loginSuccess');
+
+            loginError.textContent = '';
+            loginSuccess.textContent = '';
+
+            if (!username || !password) {
+                loginError.textContent = '❌ Benutzername und Passwort erforderlich!';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    loginSuccess.textContent = '✓ Login erfolgreich! Weiterleitung...';
+                    setTimeout(() => window.location.href = '/dashboard', 1500);
+                } else {
+                    loginError.textContent = '❌ ' + data.error;
+                }
+            } catch (error) {
+                loginError.textContent = '❌ Fehler: ' + error.message;
+            }
+        }
+
+        async function handleRegister() {
+            const username = document.getElementById('regUsername').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const confirmPassword = document.getElementById('regConfirmPassword').value;
+            const registerError = document.getElementById('registerError');
+            const registerSuccess = document.getElementById('registerSuccess');
+
+            registerError.textContent = '';
+            registerSuccess.textContent = '';
+
+            if (!username || !email || !password || !confirmPassword) {
+                registerError.textContent = '❌ Alle Felder erforderlich!';
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                registerError.textContent = '❌ Passwörter stimmen nicht überein!';
+                return;
+            }
+
+            if (password.length < 6) {
+                registerError.textContent = '❌ Passwort muss mindestens 6 Zeichen lang sein!';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password, confirmPassword })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    registerSuccess.textContent = '✓ Registrierung erfolgreich! Bitte anmelden.';
+                    setTimeout(() => toggleForm(), 1500);
+                    document.getElementById('loginUsername').value = username;
+                } else {
+                    registerError.textContent = '❌ ' + data.error;
+                }
+            } catch (error) {
+                registerError.textContent = '❌ Fehler: ' + error.message;
+            }
+        }
+
+        // Enter-Taste zum Absenden
+        document.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                if (!document.getElementById('loginForm').classList.contains('hidden')) {
+                    handleLogin();
+                } else {
+                    handleRegister();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
