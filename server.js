@@ -29,7 +29,7 @@ const storage = multer.diskStorage({
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
-    // Format: userid-timestamp-version.ext
+    // Format: userid-timestamp.ext
     const timestamp = Date.now();
     const ext = path.extname(file.originalname);
     const filename = `${req.session.userId}-${timestamp}${ext}`;
@@ -178,11 +178,14 @@ async function initDatabase() {
       console.log('✓ Fotostabelle vorhanden');
 
       // Stelle sicher, dass finished Spalte existiert
-      await conn.execute(`
-        ALTER TABLE photos ADD COLUMN IF NOT EXISTS finished TINYINT DEFAULT 0
-      `).catch(() => {
-        // Spalte existiert wahrscheinlich bereits, ignorieren
-      });
+      try {
+        await conn.execute(`
+          ALTER TABLE photos ADD COLUMN IF NOT EXISTS finished TINYINT DEFAULT 0
+        `);
+      } catch (err) {
+        // Spalte existiert wahrscheinlich bereits oder andere Fehler - ignorieren
+        console.log('Hinweis: finished Spalte existiert möglicherweise bereits');
+      }
 
 
       // Overlays-Tabelle erstellen (falls nicht vorhanden)

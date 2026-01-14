@@ -18,6 +18,9 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragMode, setDragMode] = useState(null); // 'move' oder 'resize'
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [appliedTexts, setAppliedTexts] = useState([]); // [{id, text, x, y, fontSize, font}]
+  const [textInput, setTextInput] = useState('');
+  const [showTextInput, setShowTextInput] = useState(false);
   const imgRef = useRef(null);
   const canvasContainerRef = useRef(null);
 
@@ -288,8 +291,26 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       });
 
       Promise.all(imagePromises).then(() => {
-        // Alle Overlays sind geladen und gezeichnet
+        // Zeichne Texte
+        if (appliedTexts.length > 0) {
+          appliedTexts.forEach((textObj, index) => {
+            ctx.font = `${textObj.fontSize}px ${textObj.font}`;
+            ctx.fillStyle = '#000000';
+            ctx.textAlign = 'center';
+            ctx.fillText(textObj.text, textObj.x, textObj.y);
+          });
+        }
       });
+    } else {
+      // Zeichne Texte auch wenn keine Overlays vorhanden sind
+      if (appliedTexts.length > 0) {
+        appliedTexts.forEach((textObj) => {
+          ctx.font = `${textObj.fontSize}px ${textObj.font}`;
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'center';
+          ctx.fillText(textObj.text, textObj.x, textObj.y);
+        });
+      }
     }
   }
 
@@ -398,6 +419,49 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       setMessage('❌ Fehler beim Hinzufügen des Overlays');
       console.error(error);
     }
+  }
+
+  function handleAddText() {
+    if (!textInput.trim()) {
+      setMessage('❌ Bitte einen Text eingeben');
+      return;
+    }
+
+    // Bestimme Schriftgröße basierend auf Format
+    let fontSize = 48; // Standard
+    let font = "'Source Sans Pro', sans-serif";
+
+    if (imageFormat === 'horizontal') {
+      // Oneslider Klassik: Source Sans Pro 60pt
+      fontSize = 60;
+      font = "'Source Sans Pro', sans-serif";
+    } else {
+      // Oneslider Querfotos: Blockschrift 70pt für Blockschrift, 48pt für Rest
+      // Vereinfachung: verwende 70pt als Standard für Überschrift
+      fontSize = 70;
+      font = "'Courier New', monospace"; // Blockschrift-ähnlich
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Text mittig auf Canvas platzieren
+    const textObj = {
+      id: Date.now(),
+      text: textInput,
+      x: canvas.width / 2, // Mittig horizontal
+      y: canvas.height / 2, // Mittig vertikal
+      fontSize: fontSize,
+      font: font
+    };
+
+    const newTexts = [...appliedTexts, textObj];
+    setAppliedTexts(newTexts);
+    setTextInput('');
+    setShowTextInput(false);
+    setMessage('✓ Text hinzugefügt!');
+    setTimeout(() => setMessage(''), 2000);
+    redrawCanvas();
   }
 
   function undo() {
@@ -543,6 +607,16 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       await Promise.all(imagePromises);
     }
 
+    // Texte zeichnen
+    if (appliedTexts.length > 0) {
+      appliedTexts.forEach((textObj) => {
+        ctx.font = `${textObj.fontSize}px ${textObj.font}`;
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.fillText(textObj.text, textObj.x, textObj.y);
+      });
+    }
+
     return exportCanvas;
   }
 
@@ -681,6 +755,68 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
             {appliedOverlays.length > 0 && (
               <div className="overlay-count">
                 {appliedOverlays.length} Overlay(s) angewendet
+              </div>
+            )}
+          </div>
+
+          <div className="sidebar-section">
+            <h3>✏️ Text hinzufügen</h3>
+            
+            {!showTextInput ? (
+              <button 
+                className="btn-add-text"
+                onClick={() => setShowTextInput(true)}
+              >
+                ✏️ Text hinzufügen
+              </button>
+            ) : (
+              <div className="text-input-group">
+                <input 
+                  type="text"
+                  placeholder="Text eingeben..."
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddText()}
+                  autoFocus
+                  className="text-input-field"
+                />
+                <button 
+                  className="btn-confirm-text"
+                  onClick={handleAddText}
+                >
+                  ✓ Hinzufügen
+                </button>
+                <button 
+                  className="btn-cancel-text"
+                  onClick={() => {
+                    setShowTextInput(false);
+                    setTextInput('');
+                  }}
+                >
+                  ✕ Abbrechen
+                </button>
+              </div>
+            )}
+
+            {appliedTexts.length > 0 && (
+              <div className="texts-list">
+                <p className="selector-label">Hinzugefügte Texte: ({appliedTexts.length})</p>
+                {appliedTexts.map((textObj, idx) => (
+                  <div key={textObj.id} className="text-item">
+                    <span className="text-preview">{textObj.text}</span>
+                    <button 
+                      className="btn-delete-text"
+                      onClick={() => {
+                        const newTexts = appliedTexts.filter((_, i) => i !== idx);
+                        setAppliedTexts(newTexts);
+                        redrawCanvas();
+                      }}
+                      title="Text löschen"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>

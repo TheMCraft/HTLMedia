@@ -252,19 +252,33 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
   function handleDownloadPhoto(photo) {
     const filename = photo.filename;
     const originalFilename = photo.original_filename;
+    const baseName = originalFilename.replace(/\.[^/.]+$/, '');
+    const downloadName = `${baseName}-v${photo.version}.png`;
     
     // Verwende die URL aus den Foto-Daten oder baue sie aus dem filename auf
     const downloadUrl = photo.url || `http://localhost:3000/uploads/${filename}`;
     
-    // Erstelle einen Link zum Download
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = `${originalFilename.replace(/\.[^/.]+$/, '')}-v${photo.version}.jpg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Lade die Datei als Blob herunter
+    fetch(downloadUrl, {
+      credentials: 'include'
+    })
+      .then(response => response.blob())
+      .then(blob => {
+        // Erstelle einen Blob-URL und lade herunter
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = downloadName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      })
+      .catch(error => {
+        console.error('Fehler beim Download:', error);
+        alert('Fehler beim Herunterladen der Datei');
+      });
   }
-
 
   // ===================== OVERLAY FUNCTIONS =====================
 
