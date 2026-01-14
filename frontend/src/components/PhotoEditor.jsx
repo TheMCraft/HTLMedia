@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import './PhotoEditor.css';
 
-export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleFontId, titleFontSize, descriptionFontId, descriptionFontSize, fonts }) {
+export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleFontId, titleFontSize, descriptionFontId, descriptionFontSize, fonts, logo }) {
   const canvasRef = useRef(null);
   const [imageFormat, setImageFormat] = useState(''); // 'vertical' oder 'horizontal'
   const [overlays, setOverlays] = useState([]);
@@ -34,6 +34,11 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
   
   // Title Font State
   const [titleFont, setTitleFont] = useState({ name: 'serif', size: 70 }); // Title Font from admin
+  
+  // Logo State
+  const [logoLoading, setLogoLoading] = useState(true);
+  const [logoImg, setLogoImg] = useState(null); // Geladenes Logo Bild
+  const [logoPosition, setLogoPosition] = useState({ x: 20, y: 20, scale: 0.15 }); // Logo Position auf Canvas
   
   const imgRef = useRef(null);
   const canvasContainerRef = useRef(null);
@@ -128,6 +133,42 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
     }
   }, [titleFontId, titleFontSize, fonts]);
 
+  // Logo laden
+  useEffect(() => {
+    const loadLogo = async () => {
+      try {
+        setLogoLoading(true);
+        if (logo && logo.url) {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            setLogoImg(img);
+          };
+          img.onerror = () => {
+            console.error('Fehler beim Laden des Logos');
+            setLogoImg(null);
+          };
+          img.src = logo.url;
+        } else {
+          setLogoImg(null);
+        }
+      } catch (error) {
+        console.error('Fehler beim Laden des Logos:', error);
+        setLogoImg(null);
+      } finally {
+        setLogoLoading(false);
+      }
+    };
+
+    loadLogo();
+  }, [logo]);
+
+  // Redraw canvas wenn Logo geladen oder Position sich ändert
+  useEffect(() => {
+    if (imgRef.current) {
+      redrawCanvas();
+    }
+  }, [logoPosition, logoImg]);
 
   useEffect(() => {
     const initCanvas = async () => {
@@ -360,6 +401,13 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
     if (imgRef.current) {
       const img = imgRef.current;
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    }
+
+    // Logo zeichnen wenn vorhanden
+    if (logoImg) {
+      const logoWidth = logoImg.width * logoPosition.scale;
+      const logoHeight = logoImg.height * logoPosition.scale;
+      ctx.drawImage(logoImg, logoPosition.x, logoPosition.y, logoWidth, logoHeight);
     }
 
     // Overlays überlagern - mit Promise.all für korrektes Rendering
@@ -641,7 +689,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
       setAppliedOverlays([]);
       
       const version = photoVersions[index];
-      const newPhotoUrl = `http://localhost:${window.location.hostname === 'localhost' ? '3000' : window.location.host}/uploads/${version.filename}`;
+      const newPhotoUrl = `http://localhost:${window.location.hostname === 'localhost' ? '3030' : window.location.host}/uploads/${version.filename}`;
       
       // Lade das Bild neu
       const img = new Image();
@@ -713,6 +761,13 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
     if (imgRef.current) {
       const img = imgRef.current;
       ctx.drawImage(img, 0, 0, exportCanvas.width, exportCanvas.height);
+    }
+
+    // Logo zeichnen wenn vorhanden
+    if (logoImg) {
+      const logoWidth = logoImg.width * logoPosition.scale;
+      const logoHeight = logoImg.height * logoPosition.scale;
+      ctx.drawImage(logoImg, logoPosition.x, logoPosition.y, logoWidth, logoHeight);
     }
 
     // Overlays zeichnen
@@ -894,6 +949,56 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
               <div className="overlay-count">
                 {appliedOverlays.length} Overlay(s) angewendet
               </div>
+            )}
+          </div>
+
+          <div className="sidebar-section">
+            <h3>🎨 Logo</h3>
+            
+            {logoImg ? (
+              <div className="logo-controls">
+                <p className="selector-label">Logo-Position:</p>
+                <div className="logo-position-settings">
+                  <label>
+                    X: <input 
+                      type="number" 
+                      value={logoPosition.x} 
+                      onChange={(e) => {
+                        const newPos = {...logoPosition, x: parseInt(e.target.value) || 0};
+                        setLogoPosition(newPos);
+                      }}
+                      className="position-input"
+                    />px
+                  </label>
+                  <label>
+                    Y: <input 
+                      type="number" 
+                      value={logoPosition.y} 
+                      onChange={(e) => {
+                        const newPos = {...logoPosition, y: parseInt(e.target.value) || 0};
+                        setLogoPosition(newPos);
+                      }}
+                      className="position-input"
+                    />px
+                  </label>
+                  <label>
+                    Größe: <input 
+                      type="range"
+                      min="0.05"
+                      max="0.5"
+                      step="0.05"
+                      value={logoPosition.scale}
+                      onChange={(e) => {
+                        const newPos = {...logoPosition, scale: parseFloat(e.target.value)};
+                        setLogoPosition(newPos);
+                      }}
+                      className="scale-slider"
+                    /> {(logoPosition.scale * 100).toFixed(0)}%
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <p className="no-logo">Kein Logo vorhanden. Bitte im Admin-Panel hochladen.</p>
             )}
           </div>
 

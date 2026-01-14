@@ -29,6 +29,12 @@ if (!fs.existsSync(fontsDir)) {
   fs.mkdirSync(fontsDir, { recursive: true });
 }
 
+// Logo directory
+const logosDir = path.join(__dirname, 'logos');
+if (!fs.existsSync(logosDir)) {
+  fs.mkdirSync(logosDir, { recursive: true });
+}
+
 // Multer configuration für Nutzer-Fotos
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -115,6 +121,33 @@ const fontUpload = multer({
   }
 });
 
+// Logo Upload Configuration
+const logoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, logosDir);
+  },
+  filename: (req, file, cb) => {
+    // Format: logo-timestamp.ext
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    const filename = `logo-${timestamp}${ext}`;
+    cb(null, filename);
+  }
+});
+
+const logoUpload = multer({
+  storage: logoStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB für Logos
+  fileFilter: (req, file, cb) => {
+    // Nur Bilder akzeptieren
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Nur Bilder sind erlaubt'));
+    }
+  }
+});
+
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -161,6 +194,12 @@ app.use('/overlays', express.static(overlaysDir, {
 
 // Static files für Fonts - MUSS VOR den API Routes sein!
 app.use('/fonts', express.static(fontsDir, {
+  maxAge: '1d',
+  etag: false
+}));
+
+// Static files für Logos - MUSS VOR den API Routes sein!
+app.use('/logos', express.static(logosDir, {
   maxAge: '1d',
   etag: false
 }));
@@ -252,6 +291,17 @@ async function initDatabase() {
         )
       `);
       console.log('✓ Fonts-Tabelle vorhanden');
+
+      // Logo table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS logo (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          filename VARCHAR(255) NOT NULL,
+          filesize INT NOT NULL,
+          uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✓ Logo-Tabelle vorhanden');
     } finally {
       conn.release();
     }
@@ -922,6 +972,119 @@ app.get('/api/fonts/list', requireLogin, async (req, res) => {
       }));
 
       res.json(result);
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ======================= LOGO MANAGEMENT =======================
+
+// GET: Aktuelles Logo abrufen
+app.get('/api/logo', async (req, res) => {
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      const [logos] = await connection.execute(
+        'SELECT id, filename FROM logo ORDER BY uploaded_at DESC LIMIT 1'
+      );
+
+      if (logos.length > 0) {
+        const logo = logos[0];
+        res.json({
+          id: logo.id,
+          filename: logo.filename,
+          url: `http://localhost:${process.env.PORT || 3030}/logos/${logo.filename}`
+        });
+      } else {
+        res.json({ id: null, filename: null, url: null });
+      }
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST: Logo hochladen (nur Admin)
+app.post('/api/admin/logo', requireAdmin, logoUpload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+    }
+
+    const connection = await dbPool.getConnection();
+    try {
+      // Alte Logos löschen
+      const [oldLogos] = await connection.execute('SELECT filename FROM logo');
+      
+      // Neue Logo Eintrag einfügen
+      await connection.execute(
+        'INSERT INTO logo (filename, filesize) VALUES (?, ?)',
+        [req.file.filename, req.file.size]
+      );
+
+      // Alte Logodateien löschen
+      for (const oldLogo of oldLogos) {
+        const oldPath = path.join(logosDir, oldLogo.filename);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+      }
+
+      // Alte Logo Einträge löschen (behalte nur den neuesten)
+      await connection.execute('DELETE FROM logo WHERE id != LAST_INSERT_ID()');
+
+      res.json({
+        success: true,
+        message: 'Logo hochgeladen!',
+        filename: req.file.filename,
+        url: `http://localhost:${process.env.PORT || 3030}/logos/${req.file.filename}`
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    // Datei löschen wenn DB-Error
+    if (req.file) {
+      const filePath = path.join(logosDir, req.file.filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE: Logo löschen (nur Admin)
+app.delete('/api/admin/logo/:id', requireAdmin, async (req, res) => {
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      const [logos] = await connection.execute(
+        'SELECT filename FROM logo WHERE id = ?',
+        [req.params.id]
+      );
+
+      if (logos.length === 0) {
+        return res.status(404).json({ error: 'Logo nicht gefunden' });
+      }
+
+      const filename = logos[0].filename;
+
+      // Datei löschen
+      const filePath = path.join(logosDir, filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      // Datenbank-Eintrag löschen
+      await connection.execute('DELETE FROM logo WHERE id = ?', [req.params.id]);
+
+      res.json({ success: true, message: 'Logo gelöscht!' });
     } finally {
       connection.release();
     }

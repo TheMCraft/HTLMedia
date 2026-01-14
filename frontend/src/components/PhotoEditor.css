@@ -727,3 +727,53 @@
   width: 100%;
   margin-top: 8px;
 }
+
+/* Logo Controls */
+.logo-controls {
+  background: rgba(102, 126, 234, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 10px;
+}
+
+.logo-position-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.logo-position-settings label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #a0a0a0;
+}
+
+.position-input {
+  width: 60px;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e0e0e0;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.scale-slider {
+  flex: 1;
+  height: 6px;
+  cursor: pointer;
+}
+
+.no-logo {
+  color: #a0a0a0;
+  font-size: 12px;
+  padding: 10px;
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.2);
+  border-radius: 4px;
+  text-align: center;
+}

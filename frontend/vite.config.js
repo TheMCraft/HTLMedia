@@ -13,15 +13,23 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3030',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3030',
         changeOrigin: true,
       },
       '/overlays': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3030',
+        changeOrigin: true,
+      },
+      '/fonts': {
+        target: 'http://localhost:3030',
+        changeOrigin: true,
+      },
+      '/logos': {
+        target: 'http://localhost:3030',
         changeOrigin: true,
       }
     }

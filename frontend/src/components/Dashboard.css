@@ -1204,3 +1204,92 @@
   font-size: 15px;
 }
 
+/* Logo Management Section */
+.logo-management-section {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 25px;
+  border-radius: 12px;
+  margin-bottom: 30px;
+}
+
+.logo-management-section h2 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #e0e0e0;
+}
+
+.logo-upload-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.logo-upload-box {
+  background: rgba(102, 126, 234, 0.1);
+  border: 2px dashed rgba(102, 126, 234, 0.5);
+  padding: 30px;
+  border-radius: 12px;
+  text-align: center;
+  transition: all 0.3s;
+}
+
+.logo-upload-box:hover {
+  border-color: rgba(102, 126, 234, 0.8);
+  background: rgba(102, 126, 234, 0.15);
+}
+
+.logo-upload-box h3 {
+  margin-top: 0;
+  margin-bottom: 5px;
+  color: #e0e0e0;
+}
+
+.logo-description {
+  color: #a0a0a0;
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.current-logo {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(102, 126, 234, 0.3);
+}
+
+.current-logo h4 {
+  margin: 0 0 10px 0;
+  color: #a0a0a0;
+  font-size: 12px;
+}
+
+.logo-preview {
+  max-width: 200px;
+  max-height: 150px;
+  margin: 0 auto 15px;
+  display: block;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 10px;
+}
+
+.btn-delete-logo {
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.btn-delete-logo:hover {
+  background: #ff5252;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+}
+

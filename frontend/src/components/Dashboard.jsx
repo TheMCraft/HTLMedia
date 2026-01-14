@@ -31,6 +31,12 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
   const [uploadingFont, setUploadingFont] = useState(false);
   const [fontMessage, setFontMessage] = useState('');
 
+  // Logo States
+  const [logo, setLogo] = useState(null);
+  const [loadingLogo, setLoadingLogo] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoMessage, setLogoMessage] = useState('');
+
   // Title Font Settings
   const [titleFontId, setTitleFontId] = useState(null);
   const [titleFontSize, setTitleFontSize] = useState(70);
@@ -53,6 +59,7 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
       fetchUsers();
       fetchOverlays();
       fetchFonts();
+      fetchLogo();
     }
   }, [activeTab, isAdmin]);
 
@@ -271,7 +278,7 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
     const downloadName = `${baseName}-v${photo.version}.png`;
     
     // Verwende die URL aus den Foto-Daten oder baue sie aus dem filename auf
-    const downloadUrl = photo.url || `http://localhost:3000/uploads/${filename}`;
+    const downloadUrl = photo.url || `http://localhost:3030/uploads/${filename}`;
     
     // Lade die Datei als Blob herunter
     fetch(downloadUrl, {
@@ -455,6 +462,86 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
       }
     } catch (error) {
       setFontMessage('❌ Fehler: ' + error.message);
+    }
+  }
+
+  async function fetchLogo() {
+    try {
+      setLoadingLogo(true);
+      const response = await fetch('/api/logo', {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setLogo(data);
+        setLogoMessage('');
+      } else {
+        setLogoMessage('❌ ' + (data.error || 'Fehler beim Laden'));
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden des Logos:', error);
+      setLogoMessage('❌ Fehler: ' + error.message);
+    } finally {
+      setLoadingLogo(false);
+    }
+  }
+
+  async function handleLogoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Nur Bilder akzeptieren
+    if (!file.type.startsWith('image/')) {
+      setLogoMessage('❌ Nur Bilddateien sind erlaubt');
+      return;
+    }
+
+    setUploadingLogo(true);
+    setLogoMessage('');
+
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+
+      const response = await fetch('/api/admin/logo', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setLogoMessage('✓ Logo hochgeladen!');
+        fetchLogo();
+      } else {
+        setLogoMessage('❌ ' + (data.error || 'Fehler beim Upload'));
+      }
+    } catch (error) {
+      setLogoMessage('❌ Fehler: ' + error.message);
+    }
+
+    setUploadingLogo(false);
+    e.target.value = '';
+  }
+
+  async function handleDeleteLogo() {
+    if (!logo?.id || !confirm('Logo wirklich löschen?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/logo/${logo.id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setLogoMessage('✓ Logo gelöscht!');
+        fetchLogo();
+      } else {
+        setLogoMessage('❌ ' + (data.error || 'Fehler beim Löschen'));
+      }
+    } catch (error) {
+      setLogoMessage('❌ Fehler: ' + error.message);
     }
   }
 
@@ -880,6 +967,55 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
               </div>
             </div>
 
+            <div className="logo-management-section">
+              <h2>🎨 Logo-Verwaltung</h2>
+              
+              {logoMessage && (
+                <div className={`message ${logoMessage.includes('✓') ? 'success' : 'error'}`}>
+                  {logoMessage}
+                </div>
+              )}
+
+              <div className="logo-upload-container">
+                <div className="logo-upload-box">
+                  <h3>📥 Logo hochladen</h3>
+                  <p className="logo-description">Unterstützte Formate: PNG, JPG, SVG, GIF</p>
+                  
+                  {logo?.url && (
+                    <div className="current-logo">
+                      <h4>Aktuelles Logo:</h4>
+                      <img src={logo.url} alt="Current Logo" className="logo-preview" />
+                      <button
+                        className="btn-delete-logo"
+                        onClick={handleDeleteLogo}
+                        title="Löschen"
+                      >
+                        🗑️ Logo löschen
+                      </button>
+                    </div>
+                  )}
+                  
+                  <label className="file-upload-label">
+                    {uploadingLogo ? (
+                      <span className="uploading">⏳ Wird hochgeladen...</span>
+                    ) : (
+                      <>
+                        <span className="upload-icon">📤</span>
+                        <span>Logo-Datei hochladen</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      disabled={uploadingLogo}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <div className="font-management-section">
               <h2>🔤 Font-Verwaltung</h2>
               
@@ -1015,6 +1151,7 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
           descriptionFontId={descriptionFontId}
           descriptionFontSize={descriptionFontSize}
           fonts={fonts}
+          logo={logo}
         />
       )}
     </div>
