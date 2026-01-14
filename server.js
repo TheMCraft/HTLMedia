@@ -432,10 +432,10 @@ app.get('/api/photos', requireLogin, async (req, res) => {
         [req.session.userId]
       );
       
-      // Füge URL hinzu
+      // Füge URL hinzu (vollständige URL für CORS/Fabric)
       const photosWithUrl = photos.map(photo => ({
         ...photo,
-        url: `/uploads/${photo.filename}`
+        url: `http://localhost:${process.env.PORT || 3000}/uploads/${photo.filename}`
       }));
       
       res.json(photosWithUrl);
@@ -480,6 +480,74 @@ app.post('/api/photos', requireLogin, upload.single('photo'), async (req, res) =
         success: true,
         message: 'Foto hochgeladen!',
         filename: req.file.filename
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    // Datei löschen wenn DB-Error
+    if (req.file?.path) {
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Fehler beim Löschen der Datei:', err);
+      });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST: Neue Foto-Version speichern (vom Editor)
+app.post('/api/photos/version', requireLogin, upload.single('photo'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+  }
+
+  const originalPhotoId = req.body.originalPhotoId;
+  if (!originalPhotoId) {
+    // Datei löschen wenn validation error
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error('Fehler beim Löschen der Datei:', err);
+    });
+    return res.status(400).json({ error: 'Original-Foto-ID erforderlich' });
+  }
+
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      // Original-Foto abrufen
+      const [originalPhotos] = await connection.execute(
+        'SELECT id, original_filename, version FROM photos WHERE id = ? AND user_id = ?',
+        [originalPhotoId, req.session.userId]
+      );
+
+      if (originalPhotos.length === 0) {
+        // Datei löschen wenn Photo nicht gefunden
+        fs.unlink(req.file.path, (err) => {
+          if (err) console.error('Fehler beim Löschen der Datei:', err);
+        });
+        return res.status(404).json({ error: 'Original-Foto nicht gefunden' });
+      }
+
+      const originalPhoto = originalPhotos[0];
+      const newVersion = (originalPhoto.version || 1) + 1;
+
+      // Neue Version speichern
+      await connection.execute(
+        'INSERT INTO photos (user_id, filename, original_filename, mime_type, size, version) VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          req.session.userId,
+          req.file.filename,
+          originalPhoto.original_filename,
+          req.file.mimetype,
+          req.file.size,
+          newVersion
+        ]
+      );
+
+      res.json({
+        success: true,
+        message: `Neue Version (${newVersion}) gespeichert!`,
+        filename: req.file.filename,
+        version: newVersion
       });
     } finally {
       connection.release();
@@ -660,7 +728,7 @@ app.get('/api/overlays/list/:type', requireLogin, async (req, res) => {
       const result = overlays.map(overlay => ({
         id: overlay.id,
         filename: overlay.filename,
-        url: `/overlays/${overlay.filename}`,
+        url: `http://localhost:${process.env.PORT || 3000}/overlays/${overlay.filename}`,
         overlayType: overlay.overlay_type
       }));
 

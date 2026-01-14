@@ -172,7 +172,22 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
       });
       if (response.ok) {
         const data = await response.json();
-        setPhotos(data);
+        
+        // Gruppiere nach original_filename und nehme nur die neueste Version
+        const groupedPhotos = {};
+        data.forEach(photo => {
+          const key = photo.original_filename;
+          if (!groupedPhotos[key] || photo.version > groupedPhotos[key].version) {
+            groupedPhotos[key] = photo;
+          }
+        });
+        
+        // Sortiere nach created_at DESC
+        const latestPhotos = Object.values(groupedPhotos).sort((a, b) => 
+          new Date(b.created_at) - new Date(a.created_at)
+        );
+        
+        setPhotos(latestPhotos);
       }
     } catch (error) {
       console.error('Fehler beim Laden der Fotos:', error);

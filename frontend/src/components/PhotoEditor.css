@@ -149,6 +149,37 @@
   cursor: not-allowed;
 }
 
+.btn-clear-overlays {
+  background: #dc3545;
+  border: none;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 13px;
+}
+
+.btn-clear-overlays:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+}
+
+.btn-clear-overlays:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.overlay-count {
+  background: #2a2a2a;
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: #bbb;
+  text-align: center;
+}
+
 /* History Buttons */
 .history-buttons {
   display: grid;

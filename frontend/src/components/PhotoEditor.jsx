@@ -1,62 +1,65 @@
 import { useState, useEffect, useRef } from 'react';
-import * as fabric from 'fabric';
 import './PhotoEditor.css';
 
 export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
   const canvasRef = useRef(null);
-  const [canvas, setCanvas] = useState(null);
+  const [imageFormat, setImageFormat] = useState(''); // 'vertical' oder 'horizontal'
   const [overlays, setOverlays] = useState([]);
   const [selectedOverlay, setSelectedOverlay] = useState(null);
-  const [imageFormat, setImageFormat] = useState(''); // 'vertical' oder 'horizontal'
-  const [history, setHistory] = useState([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [appliedOverlays, setAppliedOverlays] = useState([]); // [{id}]
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [photoVersions, setPhotoVersions] = useState([]); // Alle Versionen des Fotos
+  const [currentVersionIndex, setCurrentVersionIndex] = useState(0);
+  const imgRef = useRef(null);
 
   // Canvas initialisieren
   useEffect(() => {
-    if (!canvasRef.current) return;
-    
     const initCanvas = async () => {
       try {
-        const fabricCanvas = new fabric.Canvas('editor-canvas', {
-          width: canvasRef.current.offsetWidth || 800,
-          height: canvasRef.current.offsetHeight || 600,
-          backgroundColor: '#2a2a2a'
-        });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
 
-        setCanvas(fabricCanvas);
-
+        const ctx = canvas.getContext('2d');
+        
         // Bild laden
-        const img = await fabric.Image.fromURL(photoUrl);
-        
-        // Bild auf Canvas skalieren
-        const maxWidth = fabricCanvas.width - 40;
-        const maxHeight = fabricCanvas.height - 40;
-        
-        let scale = 1;
-        if (img.width > maxWidth || img.height > maxHeight) {
-          scale = Math.min(maxWidth / img.width, maxHeight / img.height);
-        }
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          imgRef.current = img;
 
-        img.set({
-          left: (fabricCanvas.width - img.width * scale) / 2,
-          top: (fabricCanvas.height - img.height * scale) / 2,
-          scaleX: scale,
-          scaleY: scale,
-          selectable: false
-        });
+          // Canvas-Größe auf Bild anpassen
+          const containerWidth = canvas?.parentElement?.offsetWidth || 800;
+          const containerHeight = canvas?.parentElement?.offsetHeight || 600;
+          const maxWidth = containerWidth - 40;
+          const maxHeight = containerHeight - 40;
 
-        fabricCanvas.add(img);
-        fabricCanvas.sendToBack(img);
-        fabricCanvas.renderAll();
+          let displayWidth = img.width;
+          let displayHeight = img.height;
 
-        // Bildformat erkennen
-        const format = img.width > img.height ? 'horizontal' : 'vertical';
-        setImageFormat(format);
+          // Skalieren wenn nötig
+          if (img.width > maxWidth || img.height > maxHeight) {
+            const scale = Math.min(maxWidth / img.width, maxHeight / img.height);
+            displayWidth = img.width * scale;
+            displayHeight = img.height * scale;
+          }
 
-        // History speichern
-        addToHistory(fabricCanvas);
+          canvas.width = displayWidth;
+          canvas.height = displayHeight;
+
+          // Bild zeichnen
+          ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+
+          // Bildformat erkennen
+          const format = img.width > img.height ? 'horizontal' : 'vertical';
+          setImageFormat(format);
+        };
+        img.onerror = () => {
+          setMessage('❌ Fehler beim Laden des Bildes');
+        };
+        img.src = photoUrl;
       } catch (error) {
         console.error('Canvas Init Fehler:', error);
         setMessage('❌ Canvas konnte nicht initialisiert werden');
@@ -64,16 +67,6 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
     };
 
     initCanvas();
-
-    return () => {
-      if (canvas) {
-        try {
-          canvas.dispose();
-        } catch (err) {
-          console.error('Fehler beim Dispose:', err);
-        }
-      }
-    };
   }, [photoUrl]);
 
   // Overlays laden (nur für erkanntes Format)
@@ -82,6 +75,11 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       fetchOverlays(imageFormat);
     }
   }, [imageFormat]);
+
+  // Canvas neu zeichnen wenn sich appliedOverlays ändern
+  useEffect(() => {
+    redrawCanvas();
+  }, [appliedOverlays]);
 
   async function fetchOverlays(format) {
     try {
@@ -100,11 +98,76 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
     }
   }
 
-  function addToHistory(fabricCanvas) {
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(JSON.stringify(fabricCanvas.toJSON()));
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
+  function redrawCanvas() {
+    const canvas = canvasRef.current;
+    if (!canvas || !imgRef.current) return;
+
+    const ctx = canvas.getContext('2d');
+    
+    // Bild als Basis zeichnen
+    ctx.drawImage(imgRef.current, 0, 0, canvas.width, canvas.height);
+
+    // Overlays überlagern - mit Promise.all für korrektes Rendering
+    if (appliedOverlays.length > 0) {
+      const imagePromises = appliedOverlays.map(overlay => {
+        return new Promise((resolve) => {
+          const overlayData = overlays.find(o => o.id === overlay.id);
+          if (overlayData) {
+            const overlayImg = new Image();
+            overlayImg.crossOrigin = 'anonymous';
+            overlayImg.onload = () => {
+              ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
+              resolve();
+            };
+            overlayImg.onerror = () => {
+              console.error('Fehler beim Laden des Overlays:', overlayData.filename);
+              resolve();
+            };
+            overlayImg.src = overlayData.url;
+          } else {
+            resolve();
+          }
+        });
+      });
+
+      Promise.all(imagePromises).then(() => {
+        // Alle Overlays sind geladen und gezeichnet
+      });
+    }
+  }
+
+  async function handleAddOverlay() {
+    if (!selectedOverlay) return;
+
+    try {
+      setMessage('⏳ Overlay wird hinzugefügt...');
+
+      const overlay = overlays.find(o => o.id === selectedOverlay);
+      if (!overlay) return;
+
+      // Neues Overlay hinzufügen
+      const newOverlay = {
+        id: selectedOverlay
+      };
+
+      const newOverlays = [...appliedOverlays, newOverlay];
+      setAppliedOverlays(newOverlays);
+      
+      // History speichern
+      const newHistory = history.slice(0, historyIndex + 1);
+      newHistory.push(JSON.stringify(newOverlays));
+      setHistory(newHistory);
+      setHistoryIndex(newHistory.length - 1);
+      
+      // Canvas sofort neu zeichnen
+      redrawCanvas();
+      
+      setMessage('✓ Overlay hinzugefügt!');
+      setTimeout(() => setMessage(''), 2000);
+    } catch (error) {
+      setMessage('❌ Fehler beim Hinzufügen des Overlays');
+      console.error(error);
+    }
   }
 
   function undo() {
@@ -123,59 +186,21 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
 
   function loadFromHistory(index) {
     const state = JSON.parse(history[index]);
-    canvas.loadFromJSON(state, () => {
-      canvas.renderAll();
-      setHistoryIndex(index);
-    });
-  }
-
-  async function handleAddOverlay() {
-    if (!selectedOverlay || !canvas) return;
-
-    try {
-      setMessage('⏳ Overlay wird hinzugefügt...');
-
-      const overlay = overlays.find(o => o.id === selectedOverlay);
-      if (!overlay) return;
-
-      fabric.Image.fromURL(overlay.url, (img) => {
-        // Overlay auf Canvas-Größe anpassen
-        const scale = Math.max(
-          canvas.width / img.width,
-          canvas.height / img.height
-        );
-
-        img.set({
-          left: 0,
-          top: 0,
-          scaleX: scale,
-          scaleY: scale,
-          opacity: 0.8,
-          selectable: true
-        });
-
-        canvas.add(img);
-        canvas.renderAll();
-
-        addToHistory(canvas);
-        setMessage('✓ Overlay hinzugefügt!');
-        setTimeout(() => setMessage(''), 2000);
-      });
-    } catch (error) {
-      setMessage('❌ Fehler beim Hinzufügen des Overlays');
-      console.error(error);
-    }
+    setAppliedOverlays(state);
+    setHistoryIndex(index);
+    setTimeout(() => {
+      redrawCanvas();
+    }, 50);
   }
 
   async function handleSaveVersion() {
+    const canvas = canvasRef.current;
     if (!canvas) return;
 
     setSaving(true);
     setMessage('⏳ Version wird gespeichert...');
 
     try {
-      // Canvas als Blob exportieren
-      canvas.renderAll();
       canvas.toBlob(async (blob) => {
         const formData = new FormData();
         formData.append('photo', blob);
@@ -196,13 +221,20 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
           }, 1500);
         } else {
           setMessage('❌ ' + (data.error || 'Fehler beim Speichern'));
+          setSaving(false);
         }
       }, 'image/png');
     } catch (error) {
       setMessage('❌ Fehler: ' + error.message);
-    } finally {
       setSaving(false);
     }
+  }
+
+  function handleClearOverlays() {
+    setAppliedOverlays([]);
+    redrawCanvas();
+    setMessage('✓ Overlays gelöscht');
+    setTimeout(() => setMessage(''), 2000);
   }
 
   return (
@@ -233,7 +265,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
                 <option value="">Overlay wählen...</option>
                 {overlays.map(overlay => (
                   <option key={overlay.id} value={overlay.id}>
-                    {overlay.filename.split('-')[1].toUpperCase()}
+                    {overlay.filename.split('-')[1]?.toUpperCase() || overlay.filename}
                   </option>
                 ))}
               </select>
@@ -243,9 +275,23 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
                 onClick={handleAddOverlay}
                 disabled={!selectedOverlay}
               >
-                ➕ Automatisch hinzufügen
+                ➕ Hinzufügen
+              </button>
+
+              <button 
+                className="btn-clear-overlays"
+                onClick={handleClearOverlays}
+                disabled={appliedOverlays.length === 0}
+              >
+                🗑️ Alle löschen
               </button>
             </div>
+
+            {appliedOverlays.length > 0 && (
+              <div className="overlay-count">
+                {appliedOverlays.length} Overlay(s) angewendet
+              </div>
+            )}
           </div>
 
           <div className="sidebar-section">
@@ -279,7 +325,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
               onClick={handleSaveVersion}
               disabled={saving}
             >
-              {saving ? '⏳ Wird gespeichert...' : '✓ Als Fertig markieren'}
+              {saving ? '⏳ Wird gespeichert...' : '✓ Speichern'}
             </button>
 
             <p className="save-info">
@@ -295,8 +341,8 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
         </div>
 
         {/* Canvas Area */}
-        <div className="editor-canvas-area" ref={canvasRef}>
-          <canvas id="editor-canvas"></canvas>
+        <div className="editor-canvas-area">
+          <canvas id="editor-canvas" ref={canvasRef}></canvas>
         </div>
       </div>
     </div>
