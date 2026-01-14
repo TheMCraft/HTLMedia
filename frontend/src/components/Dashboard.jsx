@@ -17,6 +17,12 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
   const [photos, setPhotos] = useState([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoMessage, setPhotoMessage] = useState('');
+  
+  // Overlay States
+  const [overlays, setOverlays] = useState([]);
+  const [loadingOverlays, setLoadingOverlays] = useState(false);
+  const [uploadingOverlay, setUploadingOverlay] = useState(false);
+  const [overlayMessage, setOverlayMessage] = useState('');
 
   useEffect(() => {
     fetchUserPhotos();
@@ -26,6 +32,7 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
   useEffect(() => {
     if (activeTab === 'admin' && isAdmin) {
       fetchUsers();
+      fetchOverlays();
     }
   }, [activeTab, isAdmin]);
 
@@ -208,6 +215,84 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
       }
     } catch (error) {
       setPhotoMessage('❌ Fehler: ' + error.message);
+    }
+  }
+
+  // ===================== OVERLAY FUNCTIONS =====================
+
+  async function fetchOverlays() {
+    try {
+      setLoadingOverlays(true);
+      const response = await fetch('/api/admin/overlays', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setOverlays(data);
+        setOverlayMessage('');
+      } else {
+        const data = await response.json();
+        setOverlayMessage('❌ ' + (data.error || 'Fehler beim Laden'));
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Overlays:', error);
+      setOverlayMessage('❌ Fehler: ' + error.message);
+    } finally {
+      setLoadingOverlays(false);
+    }
+  }
+
+  async function handleOverlayUpload(e, overlayType) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingOverlay(true);
+    setOverlayMessage('');
+
+    try {
+      const formData = new FormData();
+      formData.append('overlay', file);
+      formData.append('overlayType', overlayType);
+
+      const response = await fetch('/api/admin/overlays', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setOverlayMessage(`✓ ${overlayType === 'vertical' ? 'Vertikales' : 'Horizontales'} Overlay hochgeladen!`);
+        fetchOverlays();
+      } else {
+        setOverlayMessage('❌ ' + (data.error || 'Fehler beim Upload'));
+      }
+    } catch (error) {
+      setOverlayMessage('❌ Fehler: ' + error.message);
+    }
+
+    setUploadingOverlay(false);
+    e.target.value = '';
+  }
+
+  async function handleDeleteOverlay(overlayId) {
+    if (!confirm('Overlay wirklich löschen?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/overlays/${overlayId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setOverlayMessage('✓ Overlay gelöscht!');
+        fetchOverlays();
+      } else {
+        setOverlayMessage('❌ ' + (data.error || 'Fehler beim Löschen'));
+      }
+    } catch (error) {
+      setOverlayMessage('❌ Fehler: ' + error.message);
     }
   }
 
@@ -495,6 +580,114 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
                 <div className="info-item">
                   <span className="info-label">📱 Responsive:</span>
                   <span className="status online">● Unterstützt</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="overlay-management-section">
+              <h2>🎨 Overlay-Verwaltung</h2>
+              
+              {overlayMessage && (
+                <div className={`message ${overlayMessage.includes('✓') ? 'success' : 'error'}`}>
+                  {overlayMessage}
+                </div>
+              )}
+
+              <div className="overlay-upload-container">
+                {/* Vertikale Overlays */}
+                <div className="overlay-upload-box">
+                  <h3>📱 Vertikale Overlays</h3>
+                  <p className="overlay-description">Für hochformatige Bilder (Portrait)</p>
+                  
+                  <label className="file-upload-label">
+                    {uploadingOverlay ? (
+                      <span className="uploading">⏳ Wird hochgeladen...</span>
+                    ) : (
+                      <>
+                        <span className="upload-icon">📤</span>
+                        <span>Bild hochladen</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleOverlayUpload(e, 'vertical')}
+                      disabled={uploadingOverlay}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+
+                  <div className="overlay-list">
+                    {loadingOverlays ? (
+                      <div className="loading"><div className="spinner"></div></div>
+                    ) : overlays.filter(o => o.overlayType === 'vertical').length > 0 ? (
+                      overlays.filter(o => o.overlayType === 'vertical').map(overlay => (
+                        <div key={overlay.id} className="overlay-item">
+                          <img src={overlay.url} alt="Vertical Overlay" className="overlay-preview" />
+                          <div className="overlay-info">
+                            <small>{new Date(overlay.createdAt).toLocaleString('de-DE')}</small>
+                          </div>
+                          <button
+                            className="btn-delete-overlay"
+                            onClick={() => handleDeleteOverlay(overlay.id)}
+                            title="Löschen"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="no-overlay">Kein Overlay vorhanden</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Horizontale Overlays */}
+                <div className="overlay-upload-box">
+                  <h3>🖼️ Horizontale Overlays</h3>
+                  <p className="overlay-description">Für querformatige Bilder (Landscape)</p>
+                  
+                  <label className="file-upload-label">
+                    {uploadingOverlay ? (
+                      <span className="uploading">⏳ Wird hochgeladen...</span>
+                    ) : (
+                      <>
+                        <span className="upload-icon">📤</span>
+                        <span>Bild hochladen</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleOverlayUpload(e, 'horizontal')}
+                      disabled={uploadingOverlay}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+
+                  <div className="overlay-list">
+                    {loadingOverlays ? (
+                      <div className="loading"><div className="spinner"></div></div>
+                    ) : overlays.filter(o => o.overlayType === 'horizontal').length > 0 ? (
+                      overlays.filter(o => o.overlayType === 'horizontal').map(overlay => (
+                        <div key={overlay.id} className="overlay-item">
+                          <img src={overlay.url} alt="Horizontal Overlay" className="overlay-preview" />
+                          <div className="overlay-info">
+                            <small>{new Date(overlay.createdAt).toLocaleString('de-DE')}</small>
+                          </div>
+                          <button
+                            className="btn-delete-overlay"
+                            onClick={() => handleDeleteOverlay(overlay.id)}
+                            title="Löschen"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="no-overlay">Kein Overlay vorhanden</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

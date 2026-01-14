@@ -37,3 +37,4 @@ db.config.enc
 # Uploads
 uploads/
 public/
+overlays/

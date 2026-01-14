@@ -17,7 +17,13 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Multer configuration
+// Overlays directory
+const overlaysDir = path.join(__dirname, 'overlays');
+if (!fs.existsSync(overlaysDir)) {
+  fs.mkdirSync(overlaysDir, { recursive: true });
+}
+
+// Multer configuration für Nutzer-Fotos
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
@@ -33,6 +39,34 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage: storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  fileFilter: (req, file, cb) => {
+    // Nur Bilder akzeptieren
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Nur Bilder sind erlaubt'));
+    }
+  }
+});
+
+// Multer configuration für Overlays
+const overlayStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, overlaysDir);
+  },
+  filename: (req, file, cb) => {
+    // Format: overlay-type-timestamp.ext (z.B. overlay-vertical-1234567890.png)
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    const overlayType = req.body.overlayType || 'overlay';
+    const filename = `${overlayType}-${timestamp}${ext}`;
+    cb(null, filename);
+  }
+});
+
+const overlayUpload = multer({
+  storage: overlayStorage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   fileFilter: (req, file, cb) => {
     // Nur Bilder akzeptieren
@@ -78,6 +112,12 @@ app.use(session({
 
 // Static files für Uploads - MUSS VOR den API Routes sein!
 app.use('/uploads', express.static(uploadsDir, {
+  maxAge: '1d',
+  etag: false
+}));
+
+// Static files für Overlays - MUSS VOR den API Routes sein!
+app.use('/overlays', express.static(overlaysDir, {
   maxAge: '1d',
   etag: false
 }));
@@ -135,6 +175,17 @@ async function initDatabase() {
         )
       `);
       console.log('✓ Fotostabelle vorhanden');
+
+      // Overlays-Tabelle erstellen (falls nicht vorhanden)
+      await conn.execute(`
+        CREATE TABLE IF NOT EXISTS overlays (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          filename VARCHAR(255) NOT NULL UNIQUE,
+          overlay_type ENUM('vertical', 'horizontal') NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✓ Overlays-Tabelle vorhanden');
     } finally {
       conn.release();
     }
@@ -481,6 +532,148 @@ app.delete('/api/photos/:id', requireLogin, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// ======================= OVERLAY ENDPOINTS (NUR ADMIN) =======================
+
+// GET: Alle Overlays abrufen (aus DB)
+app.get('/api/admin/overlays', requireAdmin, async (req, res) => {
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      const [overlays] = await connection.execute(
+        'SELECT id, filename, overlay_type, created_at FROM overlays ORDER BY created_at DESC'
+      );
+
+      const result = overlays.map(overlay => ({
+        id: overlay.id,
+        filename: overlay.filename,
+        overlayType: overlay.overlay_type,
+        url: `/overlays/${overlay.filename}`,
+        createdAt: overlay.created_at
+      }));
+
+      res.json(result);
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST: Neues Overlay hochladen
+app.post('/api/admin/overlays', requireAdmin, overlayUpload.single('overlay'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+  }
+
+  if (!req.body.overlayType || !['vertical', 'horizontal'].includes(req.body.overlayType)) {
+    // Datei löschen wenn validation error
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error('Fehler beim Löschen der Datei:', err);
+    });
+    return res.status(400).json({ error: 'Overlay-Typ muss "vertical" oder "horizontal" sein' });
+  }
+
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      // In DB speichern
+      await connection.execute(
+        'INSERT INTO overlays (filename, overlay_type) VALUES (?, ?)',
+        [req.file.filename, req.body.overlayType]
+      );
+
+      res.json({
+        success: true,
+        message: `${req.body.overlayType === 'vertical' ? 'Vertikales' : 'Horizontales'} Overlay hochgeladen!`,
+        filename: req.file.filename,
+        overlayType: req.body.overlayType,
+        url: `/overlays/${req.file.filename}`
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    // Datei löschen wenn DB-Error
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error('Fehler beim Löschen der Datei:', err);
+    });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE: Overlay löschen
+app.delete('/api/admin/overlays/:id', requireAdmin, async (req, res) => {
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      // Overlay aus DB abrufen
+      const [overlays] = await connection.execute(
+        'SELECT filename FROM overlays WHERE id = ?',
+        [req.params.id]
+      );
+
+      if (overlays.length === 0) {
+        return res.status(404).json({ error: 'Overlay nicht gefunden' });
+      }
+
+      const filename = overlays[0].filename;
+
+      // Aus DB löschen
+      await connection.execute(
+        'DELETE FROM overlays WHERE id = ?',
+        [req.params.id]
+      );
+
+      // Datei löschen
+      const filePath = path.join(overlaysDir, filename);
+      fs.unlink(filePath, (err) => {
+        if (err) console.error('Fehler beim Löschen der Datei:', err);
+      });
+
+      res.json({ success: true, message: 'Overlay gelöscht!' });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET: Nur Overlays für Dropdown auswählen (für alle User)
+app.get('/api/overlays/list/:type', requireLogin, async (req, res) => {
+  try {
+    const overlayType = req.params.type;
+    
+    if (!['vertical', 'horizontal'].includes(overlayType)) {
+      return res.status(400).json({ error: 'Ungültiger Overlay-Typ' });
+    }
+
+    const connection = await dbPool.getConnection();
+    try {
+      const [overlays] = await connection.execute(
+        'SELECT id, filename, overlay_type FROM overlays WHERE overlay_type = ? ORDER BY created_at DESC',
+        [overlayType]
+      );
+
+      const result = overlays.map(overlay => ({
+        id: overlay.id,
+        filename: overlay.filename,
+        url: `/overlays/${overlay.filename}`,
+        overlayType: overlay.overlay_type
+      }));
+
+      res.json(result);
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ======================= NORMAL ROUTES =======================
 
 // Benutzerdaten abrufen
 app.get('/api/user', requireLogin, async (req, res) => {
