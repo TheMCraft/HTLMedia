@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import './Dashboard.css';
+import PhotoEditor from './PhotoEditor';
 
 export default function Dashboard({ user, onLogout, isAdmin }) {
   const [userDetails, setUserDetails] = useState(null);
@@ -23,6 +24,10 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
   const [loadingOverlays, setLoadingOverlays] = useState(false);
   const [uploadingOverlay, setUploadingOverlay] = useState(false);
   const [overlayMessage, setOverlayMessage] = useState('');
+
+  // Photo Editor States
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [selectedPhotoForEdit, setSelectedPhotoForEdit] = useState(null);
 
   useEffect(() => {
     fetchUserPhotos();
@@ -147,6 +152,17 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
     } catch (error) {
       setMessage('❌ Fehler: ' + error.message);
     }
+  }
+
+  function handleOpenEditor(photo) {
+    setSelectedPhotoForEdit(photo);
+    setEditorOpen(true);
+  }
+
+  function handleCloseEditor() {
+    setEditorOpen(false);
+    setSelectedPhotoForEdit(null);
+    fetchUserPhotos(); // Fotos neuladen um neue Versionen anzuzeigen
   }
 
   async function fetchUserPhotos() {
@@ -396,11 +412,21 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
                 <div className="photos-grid">
                   {photos.map((photo) => (
                     <div key={photo.id} className="photo-item">
-                      <img 
-                        src={photo.url} 
-                        alt={`Foto ${photo.id}`}
-                        className="photo-image"
-                      />
+                      <div 
+                        className="photo-image-wrapper"
+                        onClick={() => handleOpenEditor(photo)}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <img 
+                          src={photo.url} 
+                          alt={`Foto ${photo.id}`}
+                          className="photo-image"
+                        />
+                        <div className="photo-overlay-hint">
+                          <span className="edit-icon">✏️ Bearbeiten</span>
+                        </div>
+                      </div>
                       <div className="photo-info">
                         <div className="photo-meta">
                           <span className="meta-label">ID:</span> {photo.id}
@@ -694,6 +720,16 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
           </div>
         )}
       </div>
+
+      {/* Photo Editor Modal */}
+      {editorOpen && selectedPhotoForEdit && (
+        <PhotoEditor 
+          photoId={selectedPhotoForEdit.id}
+          photoUrl={selectedPhotoForEdit.url}
+          onClose={handleCloseEditor}
+          onSave={handleCloseEditor}
+        />
+      )}
     </div>
   );
 }

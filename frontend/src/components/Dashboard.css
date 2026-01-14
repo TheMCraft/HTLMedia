@@ -679,11 +679,50 @@
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
 }
 
+.photo-image-wrapper {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  display: block;
+}
+
 .photo-image {
   width: 100%;
   height: 150px;
   object-fit: cover;
   display: block;
+  transition: transform 0.3s;
+}
+
+.photo-image-wrapper:hover .photo-image {
+  transform: scale(1.05);
+}
+
+.photo-overlay-hint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.photo-image-wrapper:hover .photo-overlay-hint {
+  opacity: 1;
+}
+
+.edit-icon {
+  background: rgba(102, 126, 234, 0.9);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 13px;
 }
 
 .photo-info {
