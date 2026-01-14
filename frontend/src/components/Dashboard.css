@@ -1014,3 +1014,117 @@
   }
 }
 
+/* Font Management Section */
+.font-management-section {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 25px;
+  border-radius: 12px;
+  margin-bottom: 30px;
+}
+
+.font-management-section h2 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #e0e0e0;
+}
+
+.font-upload-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.font-upload-box {
+  background: rgba(102, 126, 234, 0.05);
+  border: 2px dashed rgba(102, 126, 234, 0.3);
+  padding: 20px;
+  border-radius: 10px;
+  transition: all 0.3s;
+}
+
+.font-upload-box:hover {
+  border-color: rgba(102, 126, 234, 0.6);
+  background: rgba(102, 126, 234, 0.08);
+}
+
+.font-upload-box h3 {
+  margin-top: 0;
+  margin-bottom: 5px;
+  color: #e0e0e0;
+}
+
+.font-description {
+  margin: 0 0 15px 0;
+  color: #888;
+  font-size: 13px;
+}
+
+.font-list {
+  margin-top: 15px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.font-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  transition: all 0.2s;
+}
+
+.font-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.font-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.font-info strong {
+  color: #e0e0e0;
+  font-size: 14px;
+}
+
+.font-info small {
+  color: #888;
+  font-size: 12px;
+}
+
+.btn-delete-font {
+  flex-shrink: 0;
+  background: rgba(255, 76, 76, 0.1);
+  border: 1px solid rgba(255, 76, 76, 0.3);
+  color: #ff4c4c;
+  padding: 6px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.3s;
+  white-space: nowrap;
+  margin-left: 10px;
+}
+
+.btn-delete-font:hover {
+  background: rgba(255, 76, 76, 0.2);
+  border-color: rgba(255, 76, 76, 0.5);
+  transform: scale(1.05);
+}
+
+.no-font {
+  color: #888;
+  text-align: center;
+  padding: 20px;
+  font-size: 13px;
+  margin: 0;
+}
+

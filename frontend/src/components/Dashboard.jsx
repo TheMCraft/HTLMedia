@@ -25,6 +25,12 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
   const [uploadingOverlay, setUploadingOverlay] = useState(false);
   const [overlayMessage, setOverlayMessage] = useState('');
 
+  // Font States
+  const [fonts, setFonts] = useState([]);
+  const [loadingFonts, setLoadingFonts] = useState(false);
+  const [uploadingFont, setUploadingFont] = useState(false);
+  const [fontMessage, setFontMessage] = useState('');
+
   // Photo Editor States
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedPhotoForEdit, setSelectedPhotoForEdit] = useState(null);
@@ -38,6 +44,7 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
     if (activeTab === 'admin' && isAdmin) {
       fetchUsers();
       fetchOverlays();
+      fetchFonts();
     }
   }, [activeTab, isAdmin]);
 
@@ -355,6 +362,91 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
       }
     } catch (error) {
       setOverlayMessage('❌ Fehler: ' + error.message);
+    }
+  }
+
+  // ===================== FONT FUNCTIONS =====================
+  async function fetchFonts() {
+    try {
+      setLoadingFonts(true);
+      const response = await fetch('/api/admin/fonts', {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setFonts(data);
+        setFontMessage('');
+      } else {
+        setFontMessage('❌ ' + (data.error || 'Fehler beim Laden'));
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Fonts:', error);
+      setFontMessage('❌ Fehler: ' + error.message);
+    } finally {
+      setLoadingFonts(false);
+    }
+  }
+
+  async function handleFontUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Nur .otf, .ttf und .woff akzeptieren
+    const validTypes = ['font/otf', 'application/x-font-opentype', 'font/ttf', 'application/x-font-truetype', 'font/woff'];
+    const validExtensions = ['.otf', '.ttf', '.woff'];
+    const fileExt = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    
+    if (!validExtensions.includes(fileExt)) {
+      setFontMessage('❌ Nur .otf, .ttf und .woff Dateien sind erlaubt');
+      return;
+    }
+
+    setUploadingFont(true);
+    setFontMessage('');
+
+    try {
+      const formData = new FormData();
+      formData.append('font', file);
+
+      const response = await fetch('/api/admin/fonts', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setFontMessage('✓ Font hochgeladen!');
+        fetchFonts();
+      } else {
+        setFontMessage('❌ ' + (data.error || 'Fehler beim Upload'));
+      }
+    } catch (error) {
+      setFontMessage('❌ Fehler: ' + error.message);
+    }
+
+    setUploadingFont(false);
+    e.target.value = '';
+  }
+
+  async function handleDeleteFont(fontId) {
+    if (!confirm('Font wirklich löschen?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/fonts/${fontId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setFontMessage('✓ Font gelöscht!');
+        fetchFonts();
+      } else {
+        setFontMessage('❌ ' + (data.error || 'Fehler beim Löschen'));
+      }
+    } catch (error) {
+      setFontMessage('❌ Fehler: ' + error.message);
     }
   }
 
@@ -774,6 +866,66 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
                       ))
                     ) : (
                       <p className="no-overlay">Kein Overlay vorhanden</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="font-management-section">
+              <h2>🔤 Font-Verwaltung</h2>
+              
+              {fontMessage && (
+                <div className={`message ${fontMessage.includes('✓') ? 'success' : 'error'}`}>
+                  {fontMessage}
+                </div>
+              )}
+
+              <div className="font-upload-container">
+                <div className="font-upload-box">
+                  <h3>📥 Custom Font hochladen</h3>
+                  <p className="font-description">Unterstützte Formate: .otf, .ttf, .woff</p>
+                  
+                  <label className="file-upload-label">
+                    {uploadingFont ? (
+                      <span className="uploading">⏳ Wird hochgeladen...</span>
+                    ) : (
+                      <>
+                        <span className="upload-icon">📤</span>
+                        <span>Font-Datei hochladen</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept=".otf,.ttf,.woff"
+                      onChange={handleFontUpload}
+                      disabled={uploadingFont}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+
+                  <div className="font-list">
+                    {loadingFonts ? (
+                      <div className="loading"><div className="spinner"></div></div>
+                    ) : fonts.length > 0 ? (
+                      fonts.map(font => (
+                        <div key={font.id} className="font-item">
+                          <div className="font-info">
+                            <strong>{font.filename}</strong>
+                            <small>{(font.filesize / 1024).toFixed(2)} KB</small>
+                            <small>{new Date(font.uploadedAt).toLocaleString('de-DE')}</small>
+                          </div>
+                          <button
+                            className="btn-delete-font"
+                            onClick={() => handleDeleteFont(font.id)}
+                            title="Löschen"
+                          >
+                            🗑️ Löschen
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="no-font">Keine Custom Fonts vorhanden</p>
                     )}
                   </div>
                 </div>

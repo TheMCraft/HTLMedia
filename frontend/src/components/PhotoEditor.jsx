@@ -18,13 +18,54 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragMode, setDragMode] = useState(null); // 'move' oder 'resize'
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [appliedTexts, setAppliedTexts] = useState([]); // [{id, text, x, y, fontSize, font}]
-  const [textInput, setTextInput] = useState('');
-  const [showTextInput, setShowTextInput] = useState(false);
+  const [titleInput, setTitleInput] = useState('');
+  const [showTitleInput, setShowTitleInput] = useState(false);
+  const [appliedTitle, setAppliedTitle] = useState(null); // {text, x, y, fontSize, font}
+  const [titleY, setTitleY] = useState(20); // Y-Position des Titels
+  const [fontLoaded, setFontLoaded] = useState(false); // Font ist geladen
+  const [customFontName, setCustomFontName] = useState('serif'); // Name des geladenen Custom Fonts
   const imgRef = useRef(null);
   const canvasContainerRef = useRef(null);
 
-  // Canvas initialisieren und alle Versionen laden
+  // Font laden
+  useEffect(() => {
+    const loadCustomFonts = async () => {
+      try {
+        // Lade die Liste der verfügbaren Custom Fonts vom Server
+        const response = await fetch('/api/fonts/list', {
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const fonts = await response.json();
+          
+          // Lade den letzten hochgeladenen Font (falls vorhanden)
+          if (fonts.length > 0) {
+            const latestFont = fonts[0];
+            // Extrahiere den Font-Namen aus dem Dateinamen (z.B. "font-1234567890.otf" -> "otf")
+            const fontExt = latestFont.filename.split('.').pop();
+            
+            const fontFace = new FontFace(fontExt, `url(${latestFont.url})`, {
+              style: 'normal',
+              weight: '400'
+            });
+            
+            await fontFace.load();
+            document.fonts.add(fontFace);
+            setCustomFontName(fontExt); // Speichere den Font-Namen für später
+            console.log(`✓ Custom Font geladen: ${fontExt}`);
+          }
+        }
+      } catch (error) {
+        console.error('Fehler beim Laden der Custom Fonts:', error);
+      } finally {
+        setFontLoaded(true);
+      }
+    };
+    
+    loadCustomFonts();
+  }, []);
+
   useEffect(() => {
     const initCanvas = async () => {
       try {
@@ -70,8 +111,11 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
           canvas.width = displayWidth;
           canvas.height = displayHeight;
 
-          // Bild zeichnen
+          // Bild mit Original-Größe zeichnen - KEINE Skalierung
           ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+          
+          // Setze imageTransform auf 1 - KEINE Veränderung des Bildes
+          setImageTransform({ x: 0, y: 0, scale: 1 });
 
           // Bildformat erkennen
           const format = img.width > img.height ? 'horizontal' : 'vertical';
@@ -100,7 +144,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
   // Canvas neu zeichnen wenn sich appliedOverlays oder imageTransform ändern
   useEffect(() => {
     redrawCanvas();
-  }, [appliedOverlays, imageTransform]);
+  }, [appliedOverlays, imageTransform, appliedTitle]);
 
   // Mouse Event Handler für Canvas
   useEffect(() => {
@@ -136,6 +180,11 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
+      
+      // NUR Overlays sind bewegbar - NICHT das Bild
+      if (selectedElementIndex === -1) {
+        return;
+      }
       
       const bounds = getElementBounds();
       if (!bounds) return;
@@ -244,17 +293,10 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Bild mit Transform zeichnen
+    // Bild OHNE Skalierung zeichnen - mit Original-Dimensionen
     if (imgRef.current) {
       const img = imgRef.current;
-      const scaledWidth = img.width * imageTransform.scale;
-      const scaledHeight = img.height * imageTransform.scale;
-      ctx.drawImage(img, imageTransform.x, imageTransform.y, scaledWidth, scaledHeight);
-      
-      // Bounding Box zeichnen wenn Bild ausgewählt ist
-      if (selectedElementIndex === -1) {
-        drawBoundingBox(ctx, imageTransform.x, imageTransform.y, scaledWidth, scaledHeight);
-      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     }
 
     // Overlays überlagern - mit Promise.all für korrektes Rendering
@@ -291,26 +333,26 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       });
 
       Promise.all(imagePromises).then(() => {
-        // Zeichne Texte
-        if (appliedTexts.length > 0) {
-          appliedTexts.forEach((textObj, index) => {
-            ctx.font = `${textObj.fontSize}px ${textObj.font}`;
-            ctx.fillStyle = '#000000';
-            ctx.textAlign = 'center';
-            ctx.fillText(textObj.text, textObj.x, textObj.y);
-          });
+        // Zeichne Title NACH den Overlays
+        if (appliedTitle) {
+          const ctx = canvas.getContext('2d');
+          ctx.font = `${appliedTitle.fontSize}px ${appliedTitle.font}`;
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillText(appliedTitle.text, appliedTitle.x, appliedTitle.y);
         }
       });
-    } else {
-      // Zeichne Texte auch wenn keine Overlays vorhanden sind
-      if (appliedTexts.length > 0) {
-        appliedTexts.forEach((textObj) => {
-          ctx.font = `${textObj.fontSize}px ${textObj.font}`;
-          ctx.fillStyle = '#000000';
-          ctx.textAlign = 'center';
-          ctx.fillText(textObj.text, textObj.x, textObj.y);
-        });
-      }
+      return;
+    }
+
+    // Title zeichnen wenn keine Overlays vorhanden sind
+    if (appliedTitle) {
+      ctx.font = `${appliedTitle.fontSize}px ${appliedTitle.font}`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(appliedTitle.text, appliedTitle.x, appliedTitle.y);
     }
   }
 
@@ -339,6 +381,31 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
     }
   }
 
+  function handleAddTitle() {
+    if (!titleInput.trim()) {
+      setMessage('❌ Bitte einen Titel eingeben');
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const titleObj = {
+      text: titleInput,
+      x: canvas.width / 2,
+      y: titleY,
+      fontSize: 70,
+      font: `${customFontName}, serif`
+    };
+
+    setAppliedTitle(titleObj);
+    setTitleInput('');
+    setShowTitleInput(false);
+    setMessage('✓ Titel hinzugefügt!');
+    setTimeout(() => setMessage(''), 2000);
+    redrawCanvas();
+  }
+
   async function handleAddOverlay() {
     if (!selectedOverlay) return;
 
@@ -352,45 +419,6 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       const overlayImg = new Image();
       overlayImg.crossOrigin = 'anonymous';
       overlayImg.onload = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        // Canvas bekommt die VOLLE Größe des Overlays (keine Skalierung)
-        const canvasWidth = overlayImg.width;
-        const canvasHeight = overlayImg.height;
-
-        canvas.width = canvasWidth;
-        canvas.height = canvasHeight;
-
-        // Skaliere das Basis-Bild auf die WIDTH des Canvas
-        if (imgRef.current) {
-          const img = imgRef.current;
-          // Skalierung basiert auf der Canvas-Breite
-          const imgScale = canvasWidth / img.width;
-          const scaledHeight = img.height * imgScale;
-          
-          // Für horizontal Overlays: Bild-Position bei (0, 1350)
-          // Für vertikal Overlays: Bild zentriert
-          let imgX = 0;
-          let imgY = 0;
-          
-          if (imageFormat === 'horizontal') {
-            // Horizontal: Oberste linke Ecke bei (0, 1350)
-            imgX = 0;
-            imgY = 1350;
-          } else {
-            // Vertikal: Zentriert
-            imgX = 0;
-            imgY = (canvasHeight - scaledHeight) / 2;
-          }
-          
-          setImageTransform({
-            x: imgX,
-            y: imgY,
-            scale: imgScale
-          });
-        }
-
         // Neues Overlay hinzufügen mit scale 1 (volle Größe)
         const newOverlay = {
           id: selectedOverlay,
@@ -408,7 +436,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
         setHistory(newHistory);
         setHistoryIndex(newHistory.length - 1);
         
-        setMessage('✓ Overlay hinzugefügt und Bild skaliert!');
+        setMessage('✓ Overlay hinzugefügt!');
         setTimeout(() => setMessage(''), 2000);
       };
       overlayImg.onerror = () => {
@@ -419,49 +447,6 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       setMessage('❌ Fehler beim Hinzufügen des Overlays');
       console.error(error);
     }
-  }
-
-  function handleAddText() {
-    if (!textInput.trim()) {
-      setMessage('❌ Bitte einen Text eingeben');
-      return;
-    }
-
-    // Bestimme Schriftgröße basierend auf Format
-    let fontSize = 48; // Standard
-    let font = "'Source Sans Pro', sans-serif";
-
-    if (imageFormat === 'horizontal') {
-      // Oneslider Klassik: Source Sans Pro 60pt
-      fontSize = 60;
-      font = "'Source Sans Pro', sans-serif";
-    } else {
-      // Oneslider Querfotos: Blockschrift 70pt für Blockschrift, 48pt für Rest
-      // Vereinfachung: verwende 70pt als Standard für Überschrift
-      fontSize = 70;
-      font = "'Courier New', monospace"; // Blockschrift-ähnlich
-    }
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // Text mittig auf Canvas platzieren
-    const textObj = {
-      id: Date.now(),
-      text: textInput,
-      x: canvas.width / 2, // Mittig horizontal
-      y: canvas.height / 2, // Mittig vertikal
-      fontSize: fontSize,
-      font: font
-    };
-
-    const newTexts = [...appliedTexts, textObj];
-    setAppliedTexts(newTexts);
-    setTextInput('');
-    setShowTextInput(false);
-    setMessage('✓ Text hinzugefügt!');
-    setTimeout(() => setMessage(''), 2000);
-    redrawCanvas();
   }
 
   function undo() {
@@ -573,12 +558,10 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
     // Zeichne alles neu ohne Bounding Box
     ctx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
 
-    // Bild zeichnen
+    // Bild zeichnen - OHNE Skalierung
     if (imgRef.current) {
       const img = imgRef.current;
-      const scaledWidth = img.width * imageTransform.scale;
-      const scaledHeight = img.height * imageTransform.scale;
-      ctx.drawImage(img, imageTransform.x, imageTransform.y, scaledWidth, scaledHeight);
+      ctx.drawImage(img, 0, 0, exportCanvas.width, exportCanvas.height);
     }
 
     // Overlays zeichnen
@@ -607,14 +590,13 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
       await Promise.all(imagePromises);
     }
 
-    // Texte zeichnen
-    if (appliedTexts.length > 0) {
-      appliedTexts.forEach((textObj) => {
-        ctx.font = `${textObj.fontSize}px ${textObj.font}`;
-        ctx.fillStyle = '#000000';
-        ctx.textAlign = 'center';
-        ctx.fillText(textObj.text, textObj.x, textObj.y);
-      });
+    // Title zeichnen
+    if (appliedTitle) {
+      ctx.font = `${appliedTitle.fontSize}px ${appliedTitle.font}`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(appliedTitle.text, appliedTitle.x, appliedTitle.y);
     }
 
     return exportCanvas;
@@ -760,37 +742,37 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
           </div>
 
           <div className="sidebar-section">
-            <h3>✏️ Text hinzufügen</h3>
+            <h3>📝 Titel hinzufügen</h3>
             
-            {!showTextInput ? (
+            {!showTitleInput ? (
               <button 
-                className="btn-add-text"
-                onClick={() => setShowTextInput(true)}
+                className="btn-add-title"
+                onClick={() => setShowTitleInput(true)}
               >
-                ✏️ Text hinzufügen
+                📝 Titel hinzufügen
               </button>
             ) : (
-              <div className="text-input-group">
+              <div className="title-input-group">
                 <input 
                   type="text"
-                  placeholder="Text eingeben..."
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleAddText()}
+                  placeholder="Titel eingeben..."
+                  value={titleInput}
+                  onChange={(e) => setTitleInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddTitle()}
                   autoFocus
-                  className="text-input-field"
+                  className="title-input-field"
                 />
                 <button 
-                  className="btn-confirm-text"
-                  onClick={handleAddText}
+                  className="btn-confirm-title"
+                  onClick={handleAddTitle}
                 >
                   ✓ Hinzufügen
                 </button>
                 <button 
-                  className="btn-cancel-text"
+                  className="btn-cancel-title"
                   onClick={() => {
-                    setShowTextInput(false);
-                    setTextInput('');
+                    setShowTitleInput(false);
+                    setTitleInput('');
                   }}
                 >
                   ✕ Abbrechen
@@ -798,25 +780,40 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave }) {
               </div>
             )}
 
-            {appliedTexts.length > 0 && (
-              <div className="texts-list">
-                <p className="selector-label">Hinzugefügte Texte: ({appliedTexts.length})</p>
-                {appliedTexts.map((textObj, idx) => (
-                  <div key={textObj.id} className="text-item">
-                    <span className="text-preview">{textObj.text}</span>
-                    <button 
-                      className="btn-delete-text"
-                      onClick={() => {
-                        const newTexts = appliedTexts.filter((_, i) => i !== idx);
-                        setAppliedTexts(newTexts);
-                        redrawCanvas();
-                      }}
-                      title="Text löschen"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                ))}
+            {appliedTitle && (
+              <div className="title-display">
+                <p className="selector-label">Titel:</p>
+                <div className="title-item">
+                  <span className="title-preview">{appliedTitle.text}</span>
+                  <button 
+                    className="btn-delete-title"
+                    onClick={() => {
+                      setAppliedTitle(null);
+                      redrawCanvas();
+                    }}
+                    title="Titel löschen"
+                  >
+                    🗑️
+                  </button>
+                </div>
+                
+                <div className="title-controls">
+                  <p className="selector-label">Y-Position des Textes:</p>
+                  <input 
+                    type="range"
+                    min="0"
+                    max={canvasRef.current?.height || 600}
+                    value={titleY}
+                    onChange={(e) => {
+                      const newY = parseInt(e.target.value);
+                      setTitleY(newY);
+                      const updatedTitle = { ...appliedTitle, y: newY };
+                      setAppliedTitle(updatedTitle);
+                    }}
+                    className="title-slider"
+                  />
+                  <span className="value-display">{titleY}px von oben</span>
+                </div>
               </div>
             )}
           </div>

@@ -23,6 +23,12 @@ if (!fs.existsSync(overlaysDir)) {
   fs.mkdirSync(overlaysDir, { recursive: true });
 }
 
+// Fonts directory
+const fontsDir = path.join(__dirname, 'fonts');
+if (!fs.existsSync(fontsDir)) {
+  fs.mkdirSync(fontsDir, { recursive: true });
+}
+
 // Multer configuration für Nutzer-Fotos
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -78,6 +84,37 @@ const overlayUpload = multer({
   }
 });
 
+// Font Upload Configuration
+const fontStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, fontsDir);
+  },
+  filename: (req, file, cb) => {
+    // Format: font-timestamp.ext (z.B. font-1234567890.otf)
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    const filename = `font-${timestamp}${ext}`;
+    cb(null, filename);
+  }
+});
+
+const fontUpload = multer({
+  storage: fontStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB für Fonts
+  fileFilter: (req, file, cb) => {
+    // Akzeptiere .otf, .ttf, .woff
+    const validMimes = ['font/otf', 'application/x-font-opentype', 'font/ttf', 'application/x-font-truetype', 'font/woff'];
+    const validExts = ['.otf', '.ttf', '.woff'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    
+    if (validExts.includes(ext) || validMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Nur .otf, .ttf und .woff Dateien sind erlaubt'));
+    }
+  }
+});
+
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -118,6 +155,12 @@ app.use('/uploads', express.static(uploadsDir, {
 
 // Static files für Overlays - MUSS VOR den API Routes sein!
 app.use('/overlays', express.static(overlaysDir, {
+  maxAge: '1d',
+  etag: false
+}));
+
+// Static files für Fonts - MUSS VOR den API Routes sein!
+app.use('/fonts', express.static(fontsDir, {
   maxAge: '1d',
   etag: false
 }));
@@ -198,6 +241,17 @@ async function initDatabase() {
         )
       `);
       console.log('✓ Overlays-Tabelle vorhanden');
+
+      // Fonts table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS fonts (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          filename VARCHAR(255) NOT NULL UNIQUE,
+          filesize INT NOT NULL,
+          uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✓ Fonts-Tabelle vorhanden');
     } finally {
       conn.release();
     }
@@ -748,6 +802,123 @@ app.get('/api/overlays/list/:type', requireLogin, async (req, res) => {
         filename: overlay.filename,
         url: `http://localhost:${process.env.PORT || 3000}/overlays/${overlay.filename}`,
         overlayType: overlay.overlay_type
+      }));
+
+      res.json(result);
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ======================= FONT MANAGEMENT =======================
+
+// GET: Alle Fonts für Admin
+app.get('/api/admin/fonts', requireAdmin, async (req, res) => {
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      const [fonts] = await connection.execute(
+        'SELECT id, filename, filesize, uploaded_at FROM fonts ORDER BY uploaded_at DESC'
+      );
+
+      const result = fonts.map(font => ({
+        id: font.id,
+        filename: font.filename,
+        filesize: font.filesize,
+        uploadedAt: font.uploaded_at,
+        url: `http://localhost:${process.env.PORT || 3000}/fonts/${font.filename}`
+      }));
+
+      res.json(result);
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST: Font hochladen
+app.post('/api/admin/fonts', requireAdmin, fontUpload.single('font'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+  }
+
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      // Speichere Font in der Datenbank
+      await connection.execute(
+        'INSERT INTO fonts (filename, filesize) VALUES (?, ?)',
+        [req.file.filename, req.file.size]
+      );
+
+      res.json({ success: true, message: 'Font hochgeladen!' });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    // Lösche Datei wenn Datenbankeintrag fehlschlägt
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error('Fehler beim Löschen der Datei:', err);
+    });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE: Font löschen
+app.delete('/api/admin/fonts/:id', requireAdmin, async (req, res) => {
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      const [fonts] = await connection.execute(
+        'SELECT filename FROM fonts WHERE id = ?',
+        [req.params.id]
+      );
+
+      if (fonts.length === 0) {
+        return res.status(404).json({ error: 'Font nicht gefunden' });
+      }
+
+      const filename = fonts[0].filename;
+
+      // Aus DB löschen
+      await connection.execute(
+        'DELETE FROM fonts WHERE id = ?',
+        [req.params.id]
+      );
+
+      // Datei löschen
+      const filePath = path.join(fontsDir, filename);
+      fs.unlink(filePath, (err) => {
+        if (err) console.error('Fehler beim Löschen der Datei:', err);
+      });
+
+      res.json({ success: true, message: 'Font gelöscht!' });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET: Alle Fonts für Editor (für alle User)
+app.get('/api/fonts/list', requireLogin, async (req, res) => {
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      const [fonts] = await connection.execute(
+        'SELECT id, filename FROM fonts ORDER BY uploaded_at DESC'
+      );
+
+      const result = fonts.map(font => ({
+        id: font.id,
+        filename: font.filename,
+        url: `http://localhost:${process.env.PORT || 3000}/fonts/${font.filename}`
       }));
 
       res.json(result);
