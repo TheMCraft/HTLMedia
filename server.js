@@ -4,9 +4,45 @@ const mysql = require('mysql2/promise');
 const bodyParser = require('body-parser');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Upload directory
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Multer configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    // Format: userid-timestamp-version.ext
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    const filename = `${req.session.userId}-${timestamp}${ext}`;
+    cb(null, filename);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  fileFilter: (req, file, cb) => {
+    // Nur Bilder akzeptieren
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Nur Bilder sind erlaubt'));
+    }
+  }
+});
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -75,6 +111,23 @@ async function initDatabase() {
         )
       `);
       console.log('✓ Benutzertabelle vorhanden');
+
+      // Fotostabelle erstellen (falls nicht vorhanden)
+      await conn.execute(`
+        CREATE TABLE IF NOT EXISTS photos (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          user_id INT NOT NULL,
+          filename VARCHAR(255) NOT NULL,
+          original_filename VARCHAR(255) NOT NULL,
+          mime_type VARCHAR(50) NOT NULL,
+          size INT NOT NULL,
+          version INT DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          INDEX (user_id)
+        )
+      `);
+      console.log('✓ Fotostabelle vorhanden');
     } finally {
       conn.release();
     }
@@ -140,7 +193,7 @@ app.post('/api/login', async (req, res) => {
     
     try {
       const [rows] = await connection.execute(
-        'SELECT id, username, password FROM users WHERE username = ?',
+        'SELECT id, username, password, role FROM users WHERE username = ?',
         [username]
       );
 
@@ -309,6 +362,121 @@ app.post('/api/admin/users/:id/reset-password', requireAdmin, async (req, res) =
     res.status(500).json({ error: error.message });
   }
 });
+
+// Photo Endpoints
+// GET: Alle Fotos des Benutzers
+app.get('/api/photos', requireLogin, async (req, res) => {
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      const [photos] = await connection.execute(
+        'SELECT id, filename, original_filename, version, created_at FROM photos WHERE user_id = ? ORDER BY created_at DESC',
+        [req.session.userId]
+      );
+      
+      // Füge URL hinzu
+      const photosWithUrl = photos.map(photo => ({
+        ...photo,
+        url: `/uploads/${photo.filename}`
+      }));
+      
+      res.json(photosWithUrl);
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST: Neue Fotos hochladen
+app.post('/api/photos', requireLogin, upload.single('photo'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+  }
+
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      // Version berechnen: Anzahl der existierenden Fotos mit gleichem Original-Namen + 1
+      const [versions] = await connection.execute(
+        'SELECT COUNT(*) as count FROM photos WHERE user_id = ? AND original_filename = ?',
+        [req.session.userId, req.file.originalname]
+      );
+      const version = (versions[0]?.count || 0) + 1;
+
+      // Foto in DB speichern
+      await connection.execute(
+        'INSERT INTO photos (user_id, filename, original_filename, mime_type, size, version) VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          req.session.userId,
+          req.file.filename,
+          req.file.originalname,
+          req.file.mimetype,
+          req.file.size,
+          version
+        ]
+      );
+
+      res.json({
+        success: true,
+        message: 'Foto hochgeladen!',
+        filename: req.file.filename
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    // Datei löschen wenn DB-Error
+    if (req.file?.path) {
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Fehler beim Löschen der Datei:', err);
+      });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE: Foto löschen
+app.delete('/api/photos/:id', requireLogin, async (req, res) => {
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      // Foto von DB abrufen (um Dateiname zu kennen)
+      const [photos] = await connection.execute(
+        'SELECT filename FROM photos WHERE id = ? AND user_id = ?',
+        [req.params.id, req.session.userId]
+      );
+
+      if (photos.length === 0) {
+        return res.status(404).json({ error: 'Foto nicht gefunden' });
+      }
+
+      const filename = photos[0].filename;
+
+      // Aus DB löschen
+      await connection.execute(
+        'DELETE FROM photos WHERE id = ? AND user_id = ?',
+        [req.params.id, req.session.userId]
+      );
+
+      // Datei löschen
+      const filePath = path.join(uploadsDir, filename);
+      fs.unlink(filePath, (err) => {
+        if (err) console.error('Fehler beim Löschen der Datei:', err);
+      });
+
+      res.json({ success: true, message: 'Foto gelöscht!' });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Static files für Uploads
+app.use('/uploads', express.static(uploadsDir));
 
 // Benutzerdaten abrufen
 app.get('/api/user', requireLogin, async (req, res) => {

@@ -14,9 +14,13 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
     password: '',
     role: 'user'
   });
+  const [photos, setPhotos] = useState([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoMessage, setPhotoMessage] = useState('');
 
   useEffect(() => {
     fetchUserDetails();
+    fetchUserPhotos();
   }, []);
 
   // Lade Admin-Users wenn Admin-Tab angezeigt wird
@@ -155,6 +159,75 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
     }
   }
 
+  async function fetchUserPhotos() {
+    try {
+      const response = await fetch('/api/photos', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPhotos(data);
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Fotos:', error);
+    }
+  }
+
+  async function handlePhotoUpload(e) {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setUploadingPhoto(true);
+    setPhotoMessage('');
+
+    for (const file of files) {
+      try {
+        const formData = new FormData();
+        formData.append('photo', file);
+
+        const response = await fetch('/api/photos', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData
+        });
+
+        if (response.ok) {
+          setPhotoMessage('✓ Foto hochgeladen!');
+          fetchUserPhotos();
+        } else {
+          const data = await response.json();
+          setPhotoMessage('❌ ' + (data.error || 'Fehler beim Upload'));
+        }
+      } catch (error) {
+        setPhotoMessage('❌ Fehler: ' + error.message);
+      }
+    }
+
+    setUploadingPhoto(false);
+    e.target.value = '';
+  }
+
+  async function handleDeletePhoto(photoId) {
+    if (!confirm('Foto wirklich löschen?')) return;
+    
+    try {
+      const response = await fetch(`/api/photos/${photoId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        setPhotoMessage('✓ Foto gelöscht!');
+        fetchUserPhotos();
+      } else {
+        const data = await response.json();
+        setPhotoMessage('❌ ' + (data.error || 'Fehler beim Löschen'));
+      }
+    } catch (error) {
+      setPhotoMessage('❌ Fehler: ' + error.message);
+    }
+  }
+
   const createdDate = userDetails?.created_at ? 
     new Date(userDetails.created_at).toLocaleDateString('de-DE', {
       year: 'numeric',
@@ -257,6 +330,66 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
                     <span className="status online">● Unterstützt</span>
                   </div>
                 </div>
+              </div>
+
+              <div className="card">
+                <h3>📸 Meine Fotos</h3>
+                {photoMessage && (
+                  <div className={`message ${photoMessage.includes('✓') ? 'success' : 'error'}`}>
+                    {photoMessage}
+                  </div>
+                )}
+                
+                <div className="photo-upload-section">
+                  <label className="upload-label">
+                    <input 
+                      type="file" 
+                      multiple 
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      disabled={uploadingPhoto}
+                      className="file-input"
+                    />
+                    <span className="upload-button">
+                      {uploadingPhoto ? '⏳ Wird hochgeladen...' : '➕ Fotos hinzufügen'}
+                    </span>
+                  </label>
+                  <p className="upload-info">Sie können mehrere Fotos gleichzeitig hochladen (lossless)</p>
+                </div>
+
+                {photos.length > 0 ? (
+                  <div className="photos-grid">
+                    {photos.map((photo) => (
+                      <div key={photo.id} className="photo-item">
+                        <img 
+                          src={photo.url} 
+                          alt={`Foto ${photo.id}`}
+                          className="photo-image"
+                        />
+                        <div className="photo-info">
+                          <div className="photo-meta">
+                            <span className="meta-label">ID:</span> {photo.id}
+                          </div>
+                          <div className="photo-meta">
+                            <span className="meta-label">Version:</span> {photo.version}
+                          </div>
+                          <div className="photo-meta">
+                            <span className="meta-label">Datum:</span> {new Date(photo.created_at).toLocaleDateString('de-DE')}
+                          </div>
+                          <button 
+                            className="btn-delete-photo"
+                            onClick={() => handleDeletePhoto(photo.id)}
+                            title="Foto löschen"
+                          >
+                            🗑️ Löschen
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="no-photos">Noch keine Fotos hochgeladen</p>
+                )}
               </div>
             </div>
           </>

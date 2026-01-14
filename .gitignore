@@ -34,3 +34,6 @@ temp/
 *.db
 *.sqlite
 db.config.enc
+# Uploads
+uploads/
+public/
