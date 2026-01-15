@@ -10,6 +10,7 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3030;
+const SERVER_BASE_URL = process.env.SERVER_BASE_URL || `http://localhost:${process.env.PORT || 3030}`;
 
 // Upload directory
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -299,11 +300,30 @@ async function initDatabase() {
         CREATE TABLE IF NOT EXISTS fonts (
           id INT AUTO_INCREMENT PRIMARY KEY,
           filename VARCHAR(255) NOT NULL UNIQUE,
+          font_type ENUM('title', 'description', 'general') NOT NULL DEFAULT 'general',
           filesize INT NOT NULL,
           uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
       console.log('✓ Fonts-Tabelle vorhanden');
+
+      // Migration: Add font_type column to fonts table if it doesn't exist
+      try {
+        await conn.execute('SELECT font_type FROM fonts LIMIT 1');
+      } catch (e) {
+        if (e.code === 'ER_BAD_FIELD_ERROR') {
+          console.warn('WARNUNG: `fonts` Tabelle hat eine veraltete Struktur (fehlt font_type) und wird aktualisiert.');
+          try {
+            await conn.execute("ALTER TABLE fonts ADD COLUMN font_type ENUM('title', 'description', 'general') NOT NULL DEFAULT 'general'");
+            console.log('✓ `fonts` Tabelle wurde erfolgreich aktualisiert (font_type hinzugefügt).');
+          } catch (alterError) {
+            console.error('❌ FEHLER beim Aktualisieren der `fonts` Tabelle:', alterError);
+            throw alterError;
+          }
+        } else {
+          throw e;
+        }
+      }
 
       // Logo table
       await conn.query(`
@@ -324,6 +344,31 @@ async function initDatabase() {
         )
       `);
       console.log('✓ Settings-Tabelle vorhanden');
+
+      // Migration: Check if settings table has the correct columns, if not, recreate it.
+      try {
+        await conn.execute('SELECT setting_key, setting_value FROM settings LIMIT 1');
+      } catch (e) {
+        if (e.code === 'ER_BAD_FIELD_ERROR') { // ER_BAD_FIELD_ERROR is the code for an unknown column
+          console.warn('WARNUNG: `settings` Tabelle hat eine veraltete Struktur und wird neu erstellt.');
+          try {
+            await conn.execute('DROP TABLE settings');
+            await conn.query(`
+              CREATE TABLE settings (
+                setting_key VARCHAR(50) PRIMARY KEY,
+                setting_value TEXT
+              )
+            `);
+            console.log('✓ `settings` Tabelle wurde erfolgreich neu erstellt.');
+          } catch (recreateError) {
+            console.error('❌ FEHLER beim Neuerstellen der `settings` Tabelle:', recreateError);
+            throw recreateError;
+          }
+        } else {
+          // For other errors, re-throw them
+          throw e;
+        }
+      }
     } finally {
       conn.release();
     }
@@ -592,7 +637,7 @@ app.get('/api/photos', requireLogin, async (req, res) => {
       const photosWithUrl = photos.map(photo => ({
         ...photo,
         finished: photo.finished === 1,
-        url: `${SERVER_BASE_URL}/uploads/${photo.filename}`
+        url: `/uploads/${photo.filename}`
       }));
       
       res.json(photosWithUrl);
@@ -778,7 +823,7 @@ app.get('/api/admin/overlays', requireAdmin, async (req, res) => {
         id: overlay.id,
         filename: overlay.filename,
         overlayType: overlay.overlay_type,
-        url: `${SERVER_BASE_URL}/overlays/${overlay.filename}`,
+        url: `/overlays/${overlay.filename}`,
         createdAt: overlay.created_at
       }));
 
@@ -890,7 +935,7 @@ app.get('/api/overlays/list/:type', requireLogin, async (req, res) => {
       const result = overlays.map(overlay => ({
         id: overlay.id,
         filename: overlay.filename,
-        url: `${SERVER_BASE_URL}/overlays/${overlay.filename}`,
+        url: `/overlays/${overlay.filename}`,
         overlayType: overlay.overlay_type
       }));
 
@@ -911,15 +956,16 @@ app.get('/api/admin/fonts', requireAdmin, async (req, res) => {
     const connection = await dbPool.getConnection();
     try {
       const [fonts] = await connection.execute(
-        'SELECT id, filename, filesize, uploaded_at FROM fonts ORDER BY uploaded_at DESC'
+        'SELECT id, filename, filesize, font_type, uploaded_at FROM fonts ORDER BY uploaded_at DESC'
       );
 
       const result = fonts.map(font => ({
         id: font.id,
         filename: font.filename,
         filesize: font.filesize,
+        font_type: font.font_type,
         uploadedAt: font.uploaded_at,
-        url: `${SERVER_BASE_URL}/fonts/${font.filename}`
+        url: `/fonts/${font.filename}`
       }));
 
       res.json(result);
@@ -937,13 +983,18 @@ app.post('/api/admin/fonts', requireAdmin, fontUpload.single('font'), async (req
     return res.status(400).json({ error: 'Keine Datei hochgeladen' });
   }
 
+  const fontType = req.body.font_type || 'general';
+  if (!['title', 'description', 'general'].includes(fontType)) {
+    return res.status(400).json({ error: 'Ungültiger font_type.' });
+  }
+
   try {
     const connection = await dbPool.getConnection();
     try {
       // Speichere Font in der Datenbank
       await connection.execute(
-        'INSERT INTO fonts (filename, filesize) VALUES (?, ?)',
-        [req.file.filename, req.file.size]
+        'INSERT INTO fonts (filename, filesize, font_type) VALUES (?, ?, ?)',
+        [req.file.filename, req.file.size, fontType]
       );
 
       res.json({ success: true, message: 'Font hochgeladen!' });
@@ -1002,13 +1053,14 @@ app.get('/api/fonts/list', requireLogin, async (req, res) => {
     const connection = await dbPool.getConnection();
     try {
       const [fonts] = await connection.execute(
-        'SELECT id, filename FROM fonts ORDER BY uploaded_at DESC'
+        'SELECT id, filename, font_type FROM fonts ORDER BY uploaded_at DESC'
       );
 
       const result = fonts.map(font => ({
         id: font.id,
         filename: font.filename,
-        url: `${SERVER_BASE_URL}/fonts/${font.filename}`
+        font_type: font.font_type,
+        url: `/fonts/${font.filename}`
       }));
 
       res.json(result);
@@ -1021,7 +1073,7 @@ app.get('/api/fonts/list', requireLogin, async (req, res) => {
 });
 
 // GET: Liefere CSS @font-face für eine Font-ID (ermöglicht konsistentes Einbinden clientseitig)
-app.get('/api/fonts/css/:id', requireLogin, async (req, res) => {
+app.get('/api/fonts/css/:id', async (req, res) => {
   try {
     const fontId = req.params.id;
     const connection = await dbPool.getConnection();
@@ -1034,7 +1086,7 @@ app.get('/api/fonts/css/:id', requireLogin, async (req, res) => {
       const filename = rows[0].filename;
       const ext = path.extname(filename).toLowerCase();
       const family = filename.includes('.') ? filename.substring(0, filename.lastIndexOf('.')) : filename;
-      const fontUrl = `${SERVER_BASE_URL}/fonts/${filename}`;
+      const fontUrl = `/fonts/${filename}`;
 
       // Bestimme format() für @font-face
       let format = 'truetype';
@@ -1071,7 +1123,7 @@ app.get('/api/logo', async (req, res) => {
         res.json({
           id: logo.id,
           filename: logo.filename,
-          url: `${SERVER_BASE_URL}/logos/${logo.filename}`
+          url: `/logos/${logo.filename}`
         });
       } else {
         res.json({ id: null, filename: null, url: null });
@@ -1117,7 +1169,7 @@ app.post('/api/admin/logo', requireAdmin, logoUpload.single('logo'), async (req,
         success: true,
         message: 'Logo hochgeladen!',
         filename: req.file.filename,
-        url: `${SERVER_BASE_URL}/logos/${req.file.filename}`
+        url: `/logos/${req.file.filename}`
       });
     } finally {
       connection.release();
@@ -1260,8 +1312,6 @@ app.get('/api/user', requireLogin, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-const SERVER_BASE_URL = process.env.SERVER_BASE_URL || `http://localhost:${process.env.PORT || 3030}`;
 
 // Server starten
 async function startServer() {
