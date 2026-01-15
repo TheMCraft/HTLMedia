@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import './Dashboard.css';
 import PhotoEditor from './PhotoEditor';
 
-export default function Dashboard({ user, onLogout, isAdmin, initialSettings }) {
+export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fonts, fetchFonts }) {
   const [userDetails, setUserDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('upload'); // 'upload', 'photos', 'admin'
@@ -25,8 +25,7 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings }) 
   const [uploadingOverlay, setUploadingOverlay] = useState(false);
   const [overlayMessage, setOverlayMessage] = useState('');
 
-  // Font States
-  const [fonts, setFonts] = useState([]);
+  // Font States (using props now for the list, but keeping some local states for loading/message)
   const [loadingFonts, setLoadingFonts] = useState(false);
   const [uploadingFont, setUploadingFont] = useState(false);
   const [fontMessage, setFontMessage] = useState('');
@@ -61,6 +60,7 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings }) 
 
   useEffect(() => {
     fetchUserPhotos();
+    refreshFonts(); // Fetch fonts for everyone so PhotoEditor has them immediately
   }, []);
 
   // Lade Admin-Users wenn Admin-Tab angezeigt wird
@@ -68,7 +68,7 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings }) 
     if (activeTab === 'admin' && isAdmin) {
       fetchUsers();
       fetchOverlays();
-      fetchFonts();
+      // fetchFonts(); // redundant now
       fetchLogo();
     }
   }, [activeTab, isAdmin]);
@@ -413,19 +413,11 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings }) 
   }
 
   // ===================== FONT FUNCTIONS =====================
-  async function fetchFonts() {
+  async function refreshFonts() {
     try {
       setLoadingFonts(true);
-      const response = await fetch('/api/admin/fonts', {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (response.ok) {
-        setFonts(data);
-        setFontMessage('');
-      } else {
-        setFontMessage('❌ ' + (data.error || 'Fehler beim Laden'));
-      }
+      await fetchFonts(); // Call prop from App.jsx
+      setFontMessage('');
     } catch (error) {
       console.error('Fehler beim Laden der Fonts:', error);
       setFontMessage('❌ Fehler: ' + error.message);
@@ -464,7 +456,7 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings }) 
       const data = await response.json();
       if (response.ok) {
         setFontMessage('✓ Font hochgeladen!');
-        fetchFonts();
+        refreshFonts();
       } else {
         setFontMessage('❌ ' + (data.error || 'Fehler beim Upload'));
       }
@@ -488,7 +480,7 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings }) 
       const data = await response.json();
       if (response.ok) {
         setFontMessage('✓ Font gelöscht!');
-        fetchFonts();
+        refreshFonts();
       } else {
         setFontMessage('❌ ' + (data.error || 'Fehler beim Löschen'));
       }

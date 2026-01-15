@@ -1,3 +1,8 @@
+:root {
+  --title-font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --description-font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -70,9 +75,23 @@ body {
 }
 
 .site-title {
+  font-family: var(--title-font);
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.6px;
   color: #ffffff;
+}
+
+.site-description {
+  font-family: var(--description-font);
+}
+
+/* Global font applications */
+h1, h2, h3, .title-text {
+  font-family: var(--title-font);
+}
+
+p, span, div, .description-text {
+  font-family: var(--description-font);
 }
 

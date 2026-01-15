@@ -30,145 +30,274 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
   const [showDescriptionInput, setShowDescriptionInput] = useState(false);
   const [appliedDescription, setAppliedDescription] = useState(null); // {text, x, y, fontSize, font}
   const [descriptionY, setDescriptionY] = useState(100); // Y-Position der Description
-  const [descriptionFont, setDescriptionFont] = useState({ name: 'serif', size: 60 }); // Description Font from admin
   
-  // Title Font State
-  const [titleFont, setTitleFont] = useState({ name: 'serif', size: 70 }); // Title Font from admin
+  // Initialize fonts from props/localStorage immediately to avoid "serif" flicker
+  const [descriptionFont, setDescriptionFont] = useState(() => {
+    const savedFonts = localStorage.getItem('app_fonts');
+    const fSource = savedFonts ? JSON.parse(savedFonts) : (fonts || []);
+    const selected = (descriptionFontId && fSource.length > 0) ? fSource.find(f => String(f.id) === String(descriptionFontId)) : null;
+    const name = selected ? (selected.family || selected.filename.replace(/\.[^.]+$/, '')) : 'serif';
+    return { name, size: descriptionFontSize || 60 };
+  });
+
+  const [titleFont, setTitleFont] = useState(() => {
+    const savedFonts = localStorage.getItem('app_fonts');
+    const fSource = savedFonts ? JSON.parse(savedFonts) : (fonts || []);
+    const selected = (titleFontId && fSource.length > 0) ? fSource.find(f => String(f.id) === String(titleFontId)) : null;
+    const name = selected ? (selected.family || selected.filename.replace(/\.[^.]+$/, '')) : 'serif';
+    return { name, size: titleFontSize || 70 };
+  });
   
-  // Logo State
-  const [logoLoading, setLogoLoading] = useState(true);
-  const [logoImg, setLogoImg] = useState(null); // Geladenes Logo Bild
-  const [logoPosition, setLogoPosition] = useState({ x: 20, y: 20, scale: 0.15 }); // Logo Position auf Canvas
+  // (Logo removed from editor - logo is still accepted as a prop but not rendered here)
   
+  // Local font selection overrides
+  const [localTitleFontId, setLocalTitleFontId] = useState(titleFontId);
+  const [localTitleFontSize, setLocalTitleFontSize] = useState(titleFontSize || 70);
+  const [localDescriptionFontId, setLocalDescriptionFontId] = useState(descriptionFontId);
+  const [localDescriptionFontSize, setLocalDescriptionFontSize] = useState(descriptionFontSize || 60);
+
   const imgRef = useRef(null);
   const canvasContainerRef = useRef(null);
 
-  // Font laden
+  // Sync with props if they change (e.g. initial load)
   useEffect(() => {
-    const loadCustomFonts = async () => {
-      try {
-        // Lade die Liste der verfügbaren Custom Fonts vom Server
-        const response = await fetch('/api/fonts/list', {
-          credentials: 'include'
-        });
-        
-        if (response.ok) {
-          const availableFonts = await response.json();
-          console.log('Verfügbare Fonts:', availableFonts);
-          
-          // Lade alle verfügbaren Fonts und register sie bei document.fonts
-          const loadPromises = availableFonts.map(async (font) => {
-            try {
-              // Verwende den Dateinamen (ohne Extension) als Font-Name für Uniqueness
-              const fontName = font.filename.substring(0, font.filename.lastIndexOf('.')) || font.filename;
-              const fontFace = new FontFace(fontName, `url(${font.url})`, {
-                style: 'normal',
-                weight: '400'
-              });
-              
-              await fontFace.load();
-              document.fonts.add(fontFace);
-              console.log(`✓ Font geladen: ${fontName} (${font.url})`);
-            } catch (err) {
-              console.error(`Fehler beim Laden von ${font.filename}:`, err);
-            }
-          });
-          
-          await Promise.all(loadPromises);
-        }
-      } catch (error) {
-        console.error('Fehler beim Laden der Custom Fonts:', error);
-      } finally {
-        setFontLoaded(true);
-      }
-    };
-    
-    loadCustomFonts();
-  }, []);
+    setLocalTitleFontId(titleFontId);
+    setLocalTitleFontSize(titleFontSize || 70);
+    setLocalDescriptionFontId(descriptionFontId);
+    setLocalDescriptionFontSize(descriptionFontSize || 60);
+  }, [titleFontId, titleFontSize, descriptionFontId, descriptionFontSize]);
 
-  // Update description font wenn Admin settings sich ändern
+  // Font laden (DEPRECATED - now handled via props and ensureFontCssAndLoad)
   useEffect(() => {
-    if (descriptionFontId && fonts && fonts.length > 0) {
-      const selectedFont = fonts.find(f => f.id === descriptionFontId);
-      if (selectedFont) {
-        // Verwende den gleichen Font-Namen wie in loadCustomFonts
-        const fontName = selectedFont.filename.substring(0, selectedFont.filename.lastIndexOf('.')) || selectedFont.filename;
-        setDescriptionFont({
-          name: fontName,
-          size: descriptionFontSize
-        });
-        console.log(`Description Font aktualisiert: ${fontName}, Größe: ${descriptionFontSize}`);
-      }
-    } else {
-      // Fallback wenn keine Font ausgewählt
-      setDescriptionFont({
-        name: 'serif',
-        size: descriptionFontSize
-      });
+    if (fonts && fonts.length > 0) {
+      setFontLoaded(true);
     }
-  }, [descriptionFontId, descriptionFontSize, fonts]);
+  }, [fonts]);
 
-  // Update title font wenn Admin settings sich ändern
+  // Update description font wenn Admin settings oder lokale Auswahl sich ändern
   useEffect(() => {
-    console.log('Title Font Effect triggered - titleFontId:', titleFontId, 'fonts:', fonts);
-    if (titleFontId && fonts && fonts.length > 0) {
-      const selectedFont = fonts.find(f => f.id === titleFontId);
-      console.log('Ausgewählter Font:', selectedFont);
-      if (selectedFont) {
-        // Verwende den gleichen Font-Namen wie in loadCustomFonts
-        const fontName = selectedFont.filename.substring(0, selectedFont.filename.lastIndexOf('.')) || selectedFont.filename;
-        setTitleFont({
-          name: fontName,
-          size: titleFontSize
-        });
-        console.log(`Title Font aktualisiert: ${fontName}, Größe: ${titleFontSize}`);
+    const run = async () => {
+      const savedFonts = localStorage.getItem('app_fonts');
+      const fSource = (fonts && fonts.length > 0) ? fonts : (savedFonts ? JSON.parse(savedFonts) : []);
+      
+      const targetId = localDescriptionFontId || descriptionFontId;
+      const targetSize = localDescriptionFontSize || descriptionFontSize || 60;
+
+      if (targetId && fSource.length > 0) {
+        const selectedFont = fSource.find(f => String(f.id) === String(targetId));
+        if (selectedFont) {
+          const fontName = selectedFont.family || (selectedFont.filename && (selectedFont.filename.substring(0, selectedFont.filename.lastIndexOf('.')) || selectedFont.filename));
+          await ensureFontCssAndLoad(selectedFont.id, fontName);
+          setDescriptionFont({ name: fontName, size: targetSize });
+          console.log(`Description Font aktualisiert: ${fontName}, Größe: ${targetSize}`);
+          return;
+        }
       }
-    } else {
-      // Fallback wenn keine Font ausgewählt
+      
+      if (targetId && fSource.length === 0) {
+        console.log('Description Font ID present but fonts list empty. Waiting...');
+        return;
+      }
+
+      setDescriptionFont({ name: 'serif', size: targetSize });
+    };
+
+    run();
+  }, [localDescriptionFontId, localDescriptionFontSize, descriptionFontId, descriptionFontSize, fonts]);
+
+  // Update title font wenn Admin settings oder lokale Auswahl sich ändern
+  useEffect(() => {
+    const run = async () => {
+      console.log('Title Font Effect triggered - localTitleFontId:', localTitleFontId, 'curr fonts prop len:', fonts?.length);
+      
+      const savedFonts = localStorage.getItem('app_fonts');
+      const fSource = (fonts && fonts.length > 0) ? fonts : (savedFonts ? JSON.parse(savedFonts) : []);
+      
+      const targetId = localTitleFontId || titleFontId;
+      const targetSize = localTitleFontSize || titleFontSize || 70;
+
+      if (targetId && fSource.length > 0) {
+        const selectedFont = fSource.find(f => String(f.id) === String(targetId));
+        if (selectedFont) {
+          const fontName = selectedFont.family || (selectedFont.filename && (selectedFont.filename.substring(0, selectedFont.filename.lastIndexOf('.')) || selectedFont.filename));
+          await ensureFontCssAndLoad(selectedFont.id, fontName);
+          setTitleFont({ name: fontName, size: targetSize });
+          console.log(`Title Font aktualisiert: ${fontName}, Größe: ${targetSize}`);
+          return;
+        }
+      }
+
+      if (targetId && fSource.length === 0) {
+        console.log('Title Font ID present but NO fonts found in prop or localStorage. Waiting...');
+        return;
+      }
+
       console.log('Title Font Fallback zu serif');
-      setTitleFont({
-        name: 'serif',
-        size: titleFontSize
-      });
-    }
-  }, [titleFontId, titleFontSize, fonts]);
+      setTitleFont({ name: 'serif', size: targetSize });
+    };
 
-  // Logo laden
+    run();
+  }, [localTitleFontId, localTitleFontSize, titleFontId, titleFontSize, fonts]);
+
+  // Wenn sich titleFont ändert, aktualisiere bestehendes appliedTitle damit es mit neuer Schrift gerendert wird
   useEffect(() => {
-    const loadLogo = async () => {
+    const run = async () => {
+      if (!appliedTitle) return;
+      const fam = titleFont.name || 'serif';
       try {
-        setLogoLoading(true);
-        if (logo && logo.url) {
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = () => {
-            setLogoImg(img);
-          };
-          img.onerror = () => {
-            console.error('Fehler beim Laden des Logos');
-            setLogoImg(null);
-          };
-          img.src = logo.url;
-        } else {
-          setLogoImg(null);
+        if (document.fonts && document.fonts.load) {
+          await document.fonts.load(`${titleFont.size}px "${fam}"`);
         }
-      } catch (error) {
-        console.error('Fehler beim Laden des Logos:', error);
-        setLogoImg(null);
-      } finally {
-        setLogoLoading(false);
+      } catch (e) {
+        console.warn('Font load in appliedTitle effect failed', fam, e);
+      }
+
+      const newFont = `"${fam}", serif`;
+      setAppliedTitle(prev => ({ ...prev, font: newFont, fontSize: titleFont.size }));
+      console.log('appliedTitle updated to use font', newFont);
+      redrawCanvas();
+    };
+
+    run();
+  }, [titleFont]);
+
+  // Wenn sich descriptionFont ändert, aktualisiere bestehendes appliedDescription
+  useEffect(() => {
+    const run = async () => {
+      if (!appliedDescription) return;
+      const fam = descriptionFont.name || 'serif';
+      try {
+        if (document.fonts && document.fonts.load) {
+          await document.fonts.load(`${descriptionFont.size}px "${fam}"`);
+        }
+      } catch (e) {
+        console.warn('Font load in appliedDescription effect failed', fam, e);
+      }
+
+      const newFont = `"${fam}", serif`;
+      setAppliedDescription(prev => ({ ...prev, font: newFont, fontSize: descriptionFont.size }));
+      console.log('appliedDescription updated to use font', newFont);
+      redrawCanvas();
+    };
+
+    run();
+  }, [descriptionFont]);
+
+  // Reagiere auf globale Settings-Updates (z.B. wenn Admin Schriftarten speichert)
+  useEffect(() => {
+    const handleSettingsUpdated = async () => {
+      try {
+        const response = await fetch('/api/settings', { credentials: 'include' });
+        if (!response.ok) return;
+        const settings = await response.json();
+
+        const newTitleFontId = settings.titleFontId || titleFontId;
+        const newTitleFontSize = settings.titleFontSize || titleFontSize;
+        const newDescriptionFontId = settings.descriptionFontId || descriptionFontId;
+        const newDescriptionFontSize = settings.descriptionFontSize || descriptionFontSize;
+
+        if (fonts && fonts.length > 0) {
+          const tFont = fonts.find(f => f.id === Number(newTitleFontId) || f.id === newTitleFontId);
+          if (tFont) {
+            const fontName = tFont.filename.substring(0, tFont.filename.lastIndexOf('.')) || tFont.filename;
+            setTitleFont({ name: fontName, size: Number(newTitleFontSize) || titleFontSize });
+          }
+
+          const dFont = fonts.find(f => f.id === Number(newDescriptionFontId) || f.id === newDescriptionFontId);
+          if (dFont) {
+            const fontName = dFont.filename.substring(0, dFont.filename.lastIndexOf('.')) || dFont.filename;
+            setDescriptionFont({ name: fontName, size: Number(newDescriptionFontSize) || descriptionFontSize });
+          }
+        }
+      } catch (err) {
+        console.error('Fehler beim Aktualisieren der Settings im PhotoEditor:', err);
       }
     };
 
-    loadLogo();
-  }, [logo]);
+    window.addEventListener('settingsUpdated', handleSettingsUpdated);
+    return () => window.removeEventListener('settingsUpdated', handleSettingsUpdated);
+  }, [fonts, titleFontId, titleFontSize, descriptionFontId, descriptionFontSize]);
 
-  // Redraw canvas wenn Logo geladen oder Position sich ändert
-  useEffect(() => {
-    if (imgRef.current) {
-      redrawCanvas();
+  // Helfer: Inject CSS-Link für eine Font-ID und warte bis die Font geladen ist
+  async function ensureFontCssAndLoad(fontId, family) {
+    if (typeof document === 'undefined' || !fontId) return;
+    const linkId = `font-css-${fontId}`;
+    let link = document.getElementById(linkId);
+    if (!link) {
+      link = document.createElement('link');
+      link.id = linkId;
+      link.rel = 'stylesheet';
+      link.href = `/api/fonts/css/${fontId}`;
+      console.log('Injecting font CSS link for', fontId, link.href);
+      document.head.appendChild(link);
+      const loaded = await new Promise((resolve) => {
+        let done = false;
+        link.onload = () => { done = true; resolve(true); };
+        link.onerror = () => { done = true; resolve(false); };
+        // Safety timeout
+        setTimeout(() => { if (!done) resolve(false); }, 2000);
+      });
+
+      if (!loaded) {
+        try {
+          console.warn('Link load failed, fetching CSS as fallback for font', fontId);
+          const resp = await fetch(`/api/fonts/css/${fontId}`, { credentials: 'include' });
+          if (resp.ok) {
+            const cssText = await resp.text();
+            const style = document.createElement('style');
+            style.id = `font-css-inline-${fontId}`;
+            style.appendChild(document.createTextNode(cssText));
+            document.head.appendChild(style);
+            console.log('Injected font CSS via inline style for', fontId);
+          } else {
+            console.warn('Fallback fetch of font CSS failed', resp.status);
+          }
+        } catch (e) {
+          console.error('Error fetching font CSS fallback', e);
+        }
+      }
     }
-  }, [logoPosition, logoImg]);
+
+    // Bestimme family falls nicht übergeben
+    let fam = family;
+    if (!fam) {
+      const fontsSource = fonts || [];
+      const f = fontsSource.find(f => String(f.id) === String(fontId));
+      fam = f?.family || (f?.filename ? f.filename.replace(/\.[^.]+$/, '') : undefined);
+    }
+
+    if (fam && document.fonts && document.fonts.load) {
+      try {
+        console.log('Checking document.fonts before load for', fam, document.fonts.check ? document.fonts.check(`16px "${fam}"`) : 'no-check');
+        await document.fonts.load(`16px "${fam}"`);
+        await document.fonts.ready;
+        console.log('document.fonts ready/check after load for', fam, document.fonts.check ? document.fonts.check(`16px "${fam}"`) : 'no-check');
+      } catch (e) {
+        console.warn('Font load failed for', fam, e);
+      }
+    }
+  }
+
+  // Helfer: warte darauf, dass die Fonts-Liste vom Server die gewünschte Font-ID enthält
+  async function waitForFontSelection(fontId, timeout = 3000) {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      try {
+        const resp = await fetch('/api/fonts/list', { credentials: 'include' });
+        if (resp.ok) {
+          const list = await resp.json();
+          const found = list.find(f => String(f.id) === String(fontId));
+          if (found) return found;
+        }
+      } catch (e) {
+        // ignore and retry
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+    return null;
+  }
+
+  // Logo rendering removed from editor (global logo handled elsewhere)
 
   useEffect(() => {
     const initCanvas = async () => {
@@ -401,12 +530,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
       ctx.drawImage(img, imageTransform.x, imageTransform.y, scaledWidth, scaledHeight);
     }
 
-    // Logo zeichnen wenn vorhanden
-    if (logoImg) {
-      const logoWidth = logoImg.width * logoPosition.scale;
-      const logoHeight = logoImg.height * logoPosition.scale;
-      ctx.drawImage(logoImg, logoPosition.x, logoPosition.y, logoWidth, logoHeight);
-    }
+    // Logo rendering removed from editor
 
     // Overlays überlagern - mit Promise.all für korrektes Rendering
     if (appliedOverlays.length > 0) {
@@ -447,7 +571,25 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
         // Zeichne Title NACH den Overlays
         if (appliedTitle) {
           const ctx = canvas.getContext('2d');
-          ctx.font = `${appliedTitle.fontSize}px ${appliedTitle.font}`;
+          const fontSpec = `${appliedTitle.fontSize}px ${appliedTitle.font}`;
+
+          // Wenn die Font noch nicht verfügbar ist, versuche sie zu laden und zeichne später erneut
+          try {
+            const checkSpec = `${Math.max(12, appliedTitle.fontSize)}px ${appliedTitle.font}`;
+            if (typeof document !== 'undefined' && document.fonts && !document.fonts.check(checkSpec)) {
+              console.warn('Title font not yet available, loading and will redraw:', checkSpec);
+              document.fonts.load(`${appliedTitle.fontSize}px ${appliedTitle.font}`).then(() => {
+                try { redrawCanvas(); } catch (e) { console.error('Fehler beim Redraw nach Font-Load', e); }
+              }).catch(err => console.warn('document.fonts.load error', err));
+              // Vorläufige Zeichnung mit Fallback
+              ctx.font = `${appliedTitle.fontSize}px serif`;
+            } else {
+              ctx.font = fontSpec;
+            }
+          } catch (err) {
+            ctx.font = fontSpec;
+          }
+
           ctx.fillStyle = '#FFFFFF';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
@@ -554,7 +696,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
     }
   }
 
-  function handleAddTitle() {
+  async function handleAddTitle() {
     if (!titleInput.trim()) {
       setMessage('❌ Bitte einen Titel eingeben');
       return;
@@ -563,12 +705,42 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Bestimme die Font-Name-Quelle
+    const fontsSource = fonts || [];
+    const activeTitleFontId = localTitleFontId || titleFontId;
+    console.log('handleAddTitle fontsSource:', fontsSource, 'seeking titleFontId:', activeTitleFontId);
+    let fontNameForTitle = titleFont.name;
+    let selected = (activeTitleFontId && fontsSource.length > 0) ? fontsSource.find(f => String(f.id) === String(activeTitleFontId)) : null;
+    
+    if (!selected && activeTitleFontId) {
+      console.log('Font not found in source, polling...');
+      setMessage('⏳ Warte auf Fonts...');
+      selected = await waitForFontSelection(activeTitleFontId, 3000);
+      setMessage('');
+      if (selected && !selected.family) {
+        selected.family = selected.filename && selected.filename.includes('.') ? selected.filename.substring(0, selected.filename.lastIndexOf('.')) : selected.filename;
+      }
+    }
+    if (selected) {
+      fontNameForTitle = selected.family || (selected.filename && (selected.filename.substring(0, selected.filename.lastIndexOf('.')) || selected.filename));
+      console.log('Found selected font for title:', fontNameForTitle);
+    } else {
+      console.warn('Could not find selected font for title, using fallback:', fontNameForTitle);
+    }
+
+    // Stelle sicher, dass die Font tatsächlich geladen ist
+    try {
+      await document.fonts.load(`${titleFont.size}px "${fontNameForTitle}"`);
+    } catch (err) {
+      console.warn('Font konnte nicht vor dem Zeichnen geladen werden:', fontNameForTitle, err);
+    }
+
     const titleObj = {
       text: titleInput,
       x: canvas.width / 2,
       y: titleY,
       fontSize: titleFont.size,
-      font: `${titleFont.name}, serif`
+      font: `"${fontNameForTitle}", serif`
     };
 
     console.log('Title hinzugefügt mit Font:', titleObj.font, 'Größe:', titleObj.fontSize);
@@ -580,7 +752,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
     redrawCanvas();
   }
 
-  function handleAddDescription() {
+  async function handleAddDescription() {
     if (!descriptionInput.trim()) {
       setMessage('❌ Bitte eine Beschreibung eingeben');
       return;
@@ -589,12 +761,42 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Bestimme Font-Name-Quelle
+    const fontsSource = fonts || [];
+    const activeDescriptionFontId = localDescriptionFontId || descriptionFontId;
+    console.log('handleAddDescription fontsSource:', fontsSource, 'seeking descriptionFontId:', activeDescriptionFontId);
+    let fontNameForDesc = descriptionFont.name;
+    let selectedDesc = (activeDescriptionFontId && fontsSource.length > 0) ? fontsSource.find(f => String(f.id) === String(activeDescriptionFontId)) : null;
+    
+    if (!selectedDesc && activeDescriptionFontId) {
+      console.log('Description font not found in source, polling...');
+      setMessage('⏳ Warte auf Fonts...');
+      selectedDesc = await waitForFontSelection(activeDescriptionFontId, 3000);
+      setMessage('');
+      if (selectedDesc && !selectedDesc.family) {
+        selectedDesc.family = selectedDesc.filename && selectedDesc.filename.includes('.') ? selectedDesc.filename.substring(0, selectedDesc.filename.lastIndexOf('.')) : selectedDesc.filename;
+      }
+    }
+    if (selectedDesc) {
+      fontNameForDesc = selectedDesc.family || (selectedDesc.filename && (selectedDesc.filename.substring(0, selectedDesc.filename.lastIndexOf('.')) || selectedDesc.filename));
+      console.log('Found selected font for description:', fontNameForDesc);
+    } else {
+      console.warn('Could not find selected font for description, using fallback:', fontNameForDesc);
+    }
+
+    // Stelle sicher, dass die Font geladen ist
+    try {
+      await document.fonts.load(`${descriptionFont.size}px "${fontNameForDesc}"`);
+    } catch (err) {
+      console.warn('Font konnte nicht vor dem Zeichnen geladen werden:', fontNameForDesc, err);
+    }
+
     const descriptionObj = {
       text: descriptionInput,
       x: canvas.width / 2,
       y: descriptionY,
       fontSize: descriptionFont.size,
-      font: `${descriptionFont.name}, serif`
+      font: `"${fontNameForDesc}", serif`
     };
 
     setAppliedDescription(descriptionObj);
@@ -802,12 +1004,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
       ctx.drawImage(img, imageTransform.x, imageTransform.y, scaledWidth, scaledHeight);
     }
 
-    // Logo zeichnen wenn vorhanden
-    if (logoImg) {
-      const logoWidth = logoImg.width * logoPosition.scale;
-      const logoHeight = logoImg.height * logoPosition.scale;
-      ctx.drawImage(logoImg, logoPosition.x, logoPosition.y, logoWidth, logoHeight);
-    }
+    // Logo rendering removed from editor
 
     // Overlays zeichnen
     if (appliedOverlays.length > 0) {
@@ -994,6 +1191,27 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
           <div className="sidebar-section">
             <h3>📝 Titel hinzufügen</h3>
             
+            <div className="font-selection-mini">
+              <select 
+                value={localTitleFontId || ''}
+                onChange={(e) => setLocalTitleFontId(e.target.value ? parseInt(e.target.value) : null)}
+                className="font-dropdown-mini"
+              >
+                <option value="">-- Standard Font --</option>
+                {fonts.map(font => (
+                  <option key={font.id} value={font.id}>{font.filename}</option>
+                ))}
+              </select>
+              <div className="size-slider-mini">
+                <span>Größe: {localTitleFontSize}px</span>
+                <input 
+                  type="range" min="20" max="150" 
+                  value={localTitleFontSize} 
+                  onChange={(e) => setLocalTitleFontSize(parseInt(e.target.value))}
+                />
+              </div>
+            </div>
+
             {!showTitleInput ? (
               <button 
                 className="btn-add-title"
@@ -1070,6 +1288,27 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
 
           <div className="sidebar-section">
             <h3>📄 Beschreibung hinzufügen</h3>
+
+            <div className="font-selection-mini">
+              <select 
+                value={localDescriptionFontId || ''}
+                onChange={(e) => setLocalDescriptionFontId(e.target.value ? parseInt(e.target.value) : null)}
+                className="font-dropdown-mini"
+              >
+                <option value="">-- Standard Font --</option>
+                {fonts.map(font => (
+                  <option key={font.id} value={font.id}>{font.filename}</option>
+                ))}
+              </select>
+              <div className="size-slider-mini">
+                <span>Größe: {localDescriptionFontSize}px</span>
+                <input 
+                  type="range" min="10" max="100" 
+                  value={localDescriptionFontSize} 
+                  onChange={(e) => setLocalDescriptionFontSize(parseInt(e.target.value))}
+                />
+              </div>
+            </div>
             
             {!showDescriptionInput ? (
               <button 

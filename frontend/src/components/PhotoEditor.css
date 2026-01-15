@@ -82,6 +82,47 @@
   border-bottom: 1px solid #2a2a2a;
 }
 
+.font-selection-mini {
+    background: #2a2a2a;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid #3a3a3a;
+}
+
+.font-dropdown-mini {
+    background: #1a1a1a;
+    border: 1px solid #444;
+    color: #fff;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    width: 100%;
+}
+
+.size-slider-mini {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.size-slider-mini span {
+    font-size: 11px;
+    color: #aaa;
+}
+
+.size-slider-mini input[type="range"] {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: #444;
+    outline: none;
+    cursor: pointer;
+}
+
 .format-info {
   padding: 10px;
   background: #2a2a2a;
