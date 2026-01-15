@@ -1,7 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import './PhotoEditor.css';
 
 export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleFontId, titleFontSize, descriptionFontId, descriptionFontSize, fonts, logo }) {
+  // Filter fonts for the dropdowns
+  const titleFonts = useMemo(() => {
+    if (!fonts) return [];
+    return fonts.filter(font => font.font_type === 'title' || font.font_type === 'general');
+  }, [fonts]);
+
+  const descriptionFonts = useMemo(() => {
+    if (!fonts) return [];
+    return fonts.filter(font => font.font_type === 'description' || font.font_type === 'general');
+  }, [fonts]);
+
   const canvasRef = useRef(null);
   const [imageFormat, setImageFormat] = useState(''); // 'vertical' oder 'horizontal'
   const [overlays, setOverlays] = useState([]);
@@ -1208,7 +1219,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
                 className="font-dropdown-mini"
               >
                 <option value="">-- Standard Font --</option>
-                {fonts.map(font => (
+                {titleFonts.map(font => (
                   <option key={font.id} value={font.id}>{font.filename}</option>
                 ))}
               </select>
@@ -1306,7 +1317,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
                 className="font-dropdown-mini"
               >
                 <option value="">-- Standard Font --</option>
-                {fonts.map(font => (
+                {descriptionFonts.map(font => (
                   <option key={font.id} value={font.id}>{font.filename}</option>
                 ))}
               </select>

@@ -384,7 +384,8 @@ function requireLogin(req, res, next) {
   if (req.session.userId) {
     next();
   } else {
-    res.redirect('/login');
+    // Send a 401 Unauthorized status, which is appropriate for API endpoints
+    res.status(401).json({ error: 'Nicht authentifiziert' });
   }
 }
 
@@ -1047,14 +1048,23 @@ app.delete('/api/admin/fonts/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// GET: Alle Fonts für Editor (für alle User)
+// GET: Alle Fonts für Editor (für alle User), filterbar nach Typ
 app.get('/api/fonts/list', requireLogin, async (req, res) => {
   try {
+    const { type } = req.query; // 'title' or 'description'
     const connection = await dbPool.getConnection();
     try {
-      const [fonts] = await connection.execute(
-        'SELECT id, filename, font_type FROM fonts ORDER BY uploaded_at DESC'
-      );
+      let query = 'SELECT id, filename, font_type FROM fonts';
+      
+      if (type === 'title') {
+        query += " WHERE font_type IN ('title', 'general')";
+      } else if (type === 'description') {
+        query += " WHERE font_type IN ('description', 'general')";
+      }
+      
+      query += ' ORDER BY uploaded_at DESC';
+
+      const [fonts] = await connection.execute(query);
 
       const result = fonts.map(font => ({
         id: font.id,
