@@ -299,7 +299,8 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
     const downloadName = `${baseName}-v${photo.version}.png`;
     
     // Verwende die URL aus den Foto-Daten oder baue sie aus dem filename auf
-    const downloadUrl = photo.url || `http://localhost:3030/uploads/${filename}`;
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3030';
+    const downloadUrl = photo.url || `${backendUrl}/uploads/${filename}`;
     
     // Lade die Datei als Blob herunter
     fetch(downloadUrl, {

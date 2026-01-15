@@ -196,34 +196,25 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
         img.onload = () => {
           imgRef.current = img;
 
-          // Canvas-Größe auf Bild anpassen
-          const containerWidth = canvas?.parentElement?.offsetWidth || 800;
-          const containerHeight = canvas?.parentElement?.offsetHeight || 600;
-          const maxWidth = containerWidth - 40;
-          const maxHeight = containerHeight - 40;
-
-          let displayWidth = img.width;
-          let displayHeight = img.height;
-
-          // Skalieren wenn nötig
-          if (img.width > maxWidth || img.height > maxHeight) {
-            const scale = Math.min(maxWidth / img.width, maxHeight / img.height);
-            displayWidth = img.width * scale;
-            displayHeight = img.height * scale;
-          }
-
-          canvas.width = displayWidth;
-          canvas.height = displayHeight;
-
-          // Bild mit Original-Größe zeichnen - KEINE Skalierung
-          ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
-          
-          // Setze imageTransform auf 1 - KEINE Veränderung des Bildes
-          setImageTransform({ x: 0, y: 0, scale: 1 });
-
           // Bildformat erkennen
           const format = img.width > img.height ? 'horizontal' : 'vertical';
           setImageFormat(format);
+
+          // Temporäre Canvas-Größe setzen (wird später vom Overlay überschrieben)
+          const containerWidth = canvas?.parentElement?.offsetWidth || 800;
+          const containerHeight = canvas?.parentElement?.offsetHeight || 600;
+          canvas.width = Math.min(containerWidth - 40, 800);
+          canvas.height = Math.min(containerHeight - 40, 600);
+
+          // Bild temporär mittig zeichnen (wird später neu positioniert)
+          const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+          const scaledWidth = img.width * scale;
+          const scaledHeight = img.height * scale;
+          const x = (canvas.width - scaledWidth) / 2;
+          const y = (canvas.height - scaledHeight) / 2;
+
+          ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+          setImageTransform({ x: x, y: y, scale: scale });
         };
         img.onerror = () => {
           setMessage('❌ Fehler beim Laden des Bildes');
@@ -241,7 +232,12 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
   // Overlays laden (nur für erkanntes Format)
   useEffect(() => {
     if (imageFormat) {
-      fetchOverlays(imageFormat);
+      fetchOverlays(imageFormat).then(() => {
+        // Nach dem Laden der Overlays die Canvas-Größe anpassen
+        if (overlays.length > 0) {
+          adjustCanvasToOverlay(overlays[0]);
+        }
+      });
     }
   }, [imageFormat]);
 
@@ -397,10 +393,12 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Bild OHNE Skalierung zeichnen - mit Original-Dimensionen
+    // Bild mit imageTransform zeichnen
     if (imgRef.current) {
       const img = imgRef.current;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const scaledWidth = img.width * imageTransform.scale;
+      const scaledHeight = img.height * imageTransform.scale;
+      ctx.drawImage(img, imageTransform.x, imageTransform.y, scaledWidth, scaledHeight);
     }
 
     // Logo zeichnen wenn vorhanden
@@ -423,6 +421,8 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
               const scaledHeight = overlayImg.height * (overlay.scale || 1);
               const x = overlay.x || 0;
               const y = overlay.y || 0;
+              
+              // Overlay zeichnen (füllt die gesamte Canvas)
               ctx.drawImage(overlayImg, x, y, scaledWidth, scaledHeight);
               
               // Bounding Box zeichnen wenn dieses Overlay ausgewählt ist
@@ -628,13 +628,21 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
 
         const newOverlays = [...appliedOverlays, newOverlay];
         setAppliedOverlays(newOverlays);
-        
+
         // History speichern
         const newHistory = history.slice(0, historyIndex + 1);
         newHistory.push(JSON.stringify(newOverlays));
         setHistory(newHistory);
         setHistoryIndex(newHistory.length - 1);
-        
+
+        // Canvas an das Overlay anpassen
+        adjustCanvasToOverlay(overlayImg);
+
+        // Wenn Overlay horizontal ist, Bild auf y=467 positionieren
+        if (overlay.overlayType === 'horizontal') {
+          setImageTransform(prev => ({ ...prev, y: 467 }));
+        }
+
         setMessage('✓ Overlay hinzugefügt!');
         setTimeout(() => setMessage(''), 2000);
       };
@@ -646,6 +654,34 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
       setMessage('❌ Fehler beim Hinzufügen des Overlays');
       console.error(error);
     }
+  }
+
+  function adjustCanvasToOverlay(overlay) {
+    if (!overlay) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Canvas-Größe auf Overlay-Größe setzen
+    canvas.width = overlay.width;
+    canvas.height = overlay.height;
+
+    // Bild an die Overlay-Größe anpassen
+    if (imgRef.current) {
+      const img = imgRef.current;
+      const scale = overlay.width / img.width;
+      const scaledWidth = img.width * scale;
+      const scaledHeight = img.height * scale;
+      
+      // Bild mittig positionieren
+      const x = (overlay.width - scaledWidth) / 2;
+      const y = (overlay.height - scaledHeight) / 2;
+      
+      setImageTransform({ x: x, y: y, scale: scale });
+    }
+
+    // Canvas neu zeichnen
+    redrawCanvas();
   }
 
   function undo() {
@@ -689,7 +725,8 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
       setAppliedOverlays([]);
       
       const version = photoVersions[index];
-      const newPhotoUrl = `http://localhost:${window.location.hostname === 'localhost' ? '3030' : window.location.host}/uploads/${version.filename}`;
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3030';
+      const newPhotoUrl = `${backendUrl}/uploads/${version.filename}`;
       
       // Lade das Bild neu
       const img = new Image();
@@ -757,10 +794,12 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
     // Zeichne alles neu ohne Bounding Box
     ctx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
 
-    // Bild zeichnen - OHNE Skalierung
+    // Bild zeichnen mit imageTransform
     if (imgRef.current) {
       const img = imgRef.current;
-      ctx.drawImage(img, 0, 0, exportCanvas.width, exportCanvas.height);
+      const scaledWidth = img.width * imageTransform.scale;
+      const scaledHeight = img.height * imageTransform.scale;
+      ctx.drawImage(img, imageTransform.x, imageTransform.y, scaledWidth, scaledHeight);
     }
 
     // Logo zeichnen wenn vorhanden

@@ -154,7 +154,7 @@ app.use(bodyParser.json());
 
 // CORS & Cookies Middleware - für ALLE Requests (API + Uploads)
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'http://localhost:4173');
+  res.header('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:4173');
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
@@ -583,7 +583,7 @@ app.get('/api/photos', requireLogin, async (req, res) => {
       const photosWithUrl = photos.map(photo => ({
         ...photo,
         finished: photo.finished === 1,
-        url: `http://localhost:${process.env.PORT || 3000}/uploads/${photo.filename}`
+        url: `${SERVER_BASE_URL}/uploads/${photo.filename}`
       }));
       
       res.json(photosWithUrl);
@@ -769,7 +769,7 @@ app.get('/api/admin/overlays', requireAdmin, async (req, res) => {
         id: overlay.id,
         filename: overlay.filename,
         overlayType: overlay.overlay_type,
-        url: `/overlays/${overlay.filename}`,
+        url: `${SERVER_BASE_URL}/overlays/${overlay.filename}`,
         createdAt: overlay.created_at
       }));
 
@@ -881,7 +881,7 @@ app.get('/api/overlays/list/:type', requireLogin, async (req, res) => {
       const result = overlays.map(overlay => ({
         id: overlay.id,
         filename: overlay.filename,
-        url: `http://localhost:${process.env.PORT || 3000}/overlays/${overlay.filename}`,
+        url: `${SERVER_BASE_URL}/overlays/${overlay.filename}`,
         overlayType: overlay.overlay_type
       }));
 
@@ -910,7 +910,7 @@ app.get('/api/admin/fonts', requireAdmin, async (req, res) => {
         filename: font.filename,
         filesize: font.filesize,
         uploadedAt: font.uploaded_at,
-        url: `http://localhost:${process.env.PORT || 3000}/fonts/${font.filename}`
+        url: `${SERVER_BASE_URL}/fonts/${font.filename}`
       }));
 
       res.json(result);
@@ -999,7 +999,7 @@ app.get('/api/fonts/list', requireLogin, async (req, res) => {
       const result = fonts.map(font => ({
         id: font.id,
         filename: font.filename,
-        url: `http://localhost:${process.env.PORT || 3000}/fonts/${font.filename}`
+        url: `${SERVER_BASE_URL}/fonts/${font.filename}`
       }));
 
       res.json(result);
@@ -1027,7 +1027,7 @@ app.get('/api/logo', async (req, res) => {
         res.json({
           id: logo.id,
           filename: logo.filename,
-          url: `http://localhost:${process.env.PORT || 3030}/logos/${logo.filename}`
+          url: `${SERVER_BASE_URL}/logos/${logo.filename}`
         });
       } else {
         res.json({ id: null, filename: null, url: null });
@@ -1073,7 +1073,7 @@ app.post('/api/admin/logo', requireAdmin, logoUpload.single('logo'), async (req,
         success: true,
         message: 'Logo hochgeladen!',
         filename: req.file.filename,
-        url: `http://localhost:${process.env.PORT || 3030}/logos/${req.file.filename}`
+        url: `${SERVER_BASE_URL}/logos/${req.file.filename}`
       });
     } finally {
       connection.release();
@@ -1147,6 +1147,8 @@ app.get('/api/user', requireLogin, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+const SERVER_BASE_URL = process.env.SERVER_BASE_URL || `http://localhost:${process.env.PORT || 3030}`;
 
 // Server starten
 async function startServer() {
