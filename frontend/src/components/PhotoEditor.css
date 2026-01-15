@@ -773,6 +773,17 @@
   transform: scale(1.1);
 }
 
+.title-controls {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.title-slider {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .description-display {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -798,6 +809,24 @@
   font-size: 13px;
   line-height: 1.4;
   word-break: break-word;
+}
+
+.description-controls {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.description-slider {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.value-display {
+  display: block;
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
 }
 
 .btn-delete-description {

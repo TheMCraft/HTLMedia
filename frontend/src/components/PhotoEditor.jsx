@@ -1308,6 +1308,24 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
                     🗑️
                   </button>
                 </div>
+
+                <div className="title-controls">
+                  <p className="selector-label">Y-Position des Textes:</p>
+                  <input 
+                    type="range"
+                    min="0"
+                    max={canvasRef.current?.height || 600}
+                    value={titleY}
+                    onChange={(e) => {
+                      const newY = parseInt(e.target.value);
+                      setTitleY(newY);
+                      const updatedTitle = { ...appliedTitle, y: newY };
+                      setAppliedTitle(updatedTitle);
+                    }}
+                    className="title-slider"
+                  />
+                  <span className="value-display">{titleY}px von oben</span>
+                </div>
               </div>
             )}
           </div>
@@ -1378,6 +1396,24 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
                   >
                     🗑️
                   </button>
+                </div>
+
+                <div className="description-controls">
+                  <p className="selector-label">Y-Position des Textes:</p>
+                  <input 
+                    type="range"
+                    min="0"
+                    max={canvasRef.current?.height || 600}
+                    value={descriptionY}
+                    onChange={(e) => {
+                      const newY = parseInt(e.target.value);
+                      setDescriptionY(newY);
+                      const updatedDescription = { ...appliedDescription, y: newY };
+                      setAppliedDescription(updatedDescription);
+                    }}
+                    className="description-slider"
+                  />
+                  <span className="value-display">{descriptionY}px von oben</span>
                 </div>
               </div>
             )}

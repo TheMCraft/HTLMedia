@@ -17,6 +17,8 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
   });
   const [photos, setPhotos] = useState([]);
   const [allPhotos, setAllPhotos] = useState([]);
+  const [userStats, setUserStats] = useState({ count: 0, size: 0 });
+  const [globalStats, setGlobalStats] = useState({ count: 0, size: 0 });
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoMessage, setPhotoMessage] = useState('');
   
@@ -61,8 +63,9 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
 
   useEffect(() => {
     fetchUserPhotos();
+    if (isAdmin) fetchAllPhotos();
     refreshFonts(); // Fetch fonts for everyone so PhotoEditor has them immediately
-  }, []);
+  }, [isAdmin]);
 
   // Lade Admin-Users wenn Admin-Tab angezeigt wird
   useEffect(() => {
@@ -231,6 +234,10 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
       if (response.ok) {
         const data = await response.json();
         
+        // Berechne Statistik über ALLE Versionen (bevor gruppiert wird)
+        const totalSize = data.reduce((sum, p) => sum + (p.size || 0), 0);
+        setUserStats({ count: data.length, size: totalSize });
+
         // Gruppiere nach original_filename und nehme nur die neueste Version
         const groupedPhotos = {};
         data.forEach(photo => {
@@ -259,6 +266,12 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
       });
       if (response.ok) {
         const data = await response.json();
+        
+        // Berechne globale Statistik
+        const totalSize = data.reduce((sum, p) => sum + (p.size || 0), 0);
+        setGlobalStats({ count: data.length, size: totalSize });
+
+        // Keine Gruppierung - jede Version als eigenes Bild anzeigen
         setAllPhotos(data);
       }
     } catch (error) {
@@ -723,15 +736,31 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
                 <h3>📊 Ihre Upload Statistik</h3>
                 <div className="stats-section">
                   <div className="stat-box">
-                    <span className="stat-value">{photos.length}</span>
-                    <span className="stat-title">Fotos hochgeladen</span>
+                    <span className="stat-value">{userStats.count}</span>
+                    <span className="stat-title">Dateien (inkl. Versionen)</span>
                   </div>
                   <div className="stat-box">
-                    <span className="stat-value">{photos.reduce((sum, p) => sum + (p.size || 0), 0) ? Math.round(photos.reduce((sum, p) => sum + (p.size || 0), 0) / 1024 / 1024) : 0}</span>
+                    <span className="stat-value">{Math.round(userStats.size / 1024 / 1024 * 10) / 10}</span>
                     <span className="stat-title">MB Speicher</span>
                   </div>
                 </div>
               </div>
+
+              {isAdmin && (
+                <div className="card admin-stats-card">
+                  <h3>🌐 Gesamtsystem Statistik</h3>
+                  <div className="stats-section">
+                    <div className="stat-box">
+                      <span className="stat-value">{globalStats.count}</span>
+                      <span className="stat-title">Dateien gesamt</span>
+                    </div>
+                    <div className="stat-box">
+                      <span className="stat-value">{Math.round(globalStats.size / 1024 / 1024 * 10) / 10}</span>
+                      <span className="stat-title">MB gesamt (alle User)</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         ) : activeTab === 'photos' ? (
@@ -902,6 +931,10 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
               <div className="stat-card">
                 <span className="stat-number">{users.filter(u => u.role === 'user').length}</span>
                 <span className="stat-label">Reguläre User</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-number">{Math.round(globalStats.size / 1024 / 1024 * 10) / 10} MB</span>
+                <span className="stat-label">Gesamtspeicher</span>
               </div>
             </div>
 
