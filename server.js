@@ -629,7 +629,7 @@ app.get('/api/admin/photos', requireAdmin, async (req, res) => {
     const connection = await dbPool.getConnection();
     try {
       const [photos] = await connection.execute(
-        `SELECT p.id, p.filename, p.original_filename, p.version, p.finished, p.created_at, u.username 
+        `SELECT p.id, p.filename, p.original_filename, p.version, p.finished, p.created_at, p.size, u.username 
          FROM photos p 
          JOIN users u ON p.user_id = u.id 
          ORDER BY p.created_at DESC`
@@ -657,7 +657,7 @@ app.get('/api/photos', requireLogin, async (req, res) => {
     const connection = await dbPool.getConnection();
     try {
       const [photos] = await connection.execute(
-        'SELECT id, filename, original_filename, version, finished, created_at FROM photos WHERE user_id = ? ORDER BY created_at DESC',
+        'SELECT id, filename, original_filename, version, finished, created_at, size FROM photos WHERE user_id = ? ORDER BY created_at DESC',
         [req.session.userId]
       );
       
