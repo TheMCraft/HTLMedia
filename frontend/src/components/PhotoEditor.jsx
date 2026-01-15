@@ -2,23 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import './PhotoEditor.css';
 
 export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleFontId, titleFontSize, descriptionFontId, descriptionFontSize, fonts, logo }) {
-  // Admin-Font global setzen
-  useEffect(() => {
-    if (titleFontId && fonts && fonts.length > 0) {
-      const selectedFont = fonts.find(f => f.id === titleFontId);
-      if (selectedFont) {
-        const fontName = selectedFont.filename.substring(0, selectedFont.filename.lastIndexOf('.')) || selectedFont.filename;
-        setTitleFont({ name: fontName, size: titleFontSize });
-      }
-    }
-    if (descriptionFontId && fonts && fonts.length > 0) {
-      const selectedFont = fonts.find(f => f.id === descriptionFontId);
-      if (selectedFont) {
-        const fontName = selectedFont.filename.substring(0, selectedFont.filename.lastIndexOf('.')) || selectedFont.filename;
-        setDescriptionFont({ name: fontName, size: descriptionFontSize });
-      }
-    }
-  }, [titleFontId, titleFontSize, descriptionFontId, descriptionFontSize, fonts]);
   const canvasRef = useRef(null);
   const [imageFormat, setImageFormat] = useState(''); // 'vertical' oder 'horizontal'
   const [overlays, setOverlays] = useState([]);
@@ -250,7 +233,10 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
   useEffect(() => {
     if (imageFormat) {
       fetchOverlays(imageFormat).then(() => {
-        // Do not auto-resize canvas to overlay here — keep canvas size tied to the photo
+        // Nach dem Laden der Overlays die Canvas-Größe anpassen
+        if (overlays.length > 0) {
+          adjustCanvasToOverlay(overlays[0]);
+        }
       });
     }
   }, [imageFormat]);
@@ -649,7 +635,10 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
         setHistory(newHistory);
         setHistoryIndex(newHistory.length - 1);
 
-        // Do not resize canvas to the overlay image; only position the photo when needed
+        // Canvas an das Overlay anpassen
+        adjustCanvasToOverlay(overlayImg);
+
+        // Wenn Overlay horizontal ist, Bild auf y=467 positionieren
         if (overlay.overlayType === 'horizontal') {
           setImageTransform(prev => ({ ...prev, y: 467 }));
         }
@@ -1001,8 +990,6 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
               </div>
             )}
           </div>
-
-          {/* Logo-Auswahl entfernt, Logo wird nicht mehr im Editor angezeigt */}
 
           <div className="sidebar-section">
             <h3>📝 Titel hinzufügen</h3>

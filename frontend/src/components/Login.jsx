@@ -105,13 +105,13 @@ export default function Login({ onLoginSuccess, logo }) {
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <h1 style={{display:'flex',alignItems:'center',gap:'10px'}}>
+          <div className="logo-center">
             {logo && logo.url ? (
-              <img src={logo.url} alt="Logo" style={{height:'40px',verticalAlign:'middle'}} />
+              <img src={logo.url} alt="Logo" className="site-logo" />
             ) : (
-              'HTLMedia'
+              <span className="site-title">HTLMedia</span>
             )}
-          </h1>
+          </div>
           <p>{isLogin ? 'Willkommen' : 'Registrieren'}</p>
         </div>
 

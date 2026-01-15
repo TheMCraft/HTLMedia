@@ -7,10 +7,15 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [logo, setLogo] = useState(null);
+  const [settings, setSettings] = useState({});
 
   useEffect(() => {
     checkAuthStatus();
     fetchLogo();
+    fetchSettings();
+    const onSettingsUpdated = () => fetchSettings();
+    window.addEventListener('settingsUpdated', onSettingsUpdated);
+    return () => window.removeEventListener('settingsUpdated', onSettingsUpdated);
   }, []);
 
   async function checkAuthStatus() {
@@ -60,6 +65,22 @@ function App() {
     }
   }
 
+  async function fetchSettings() {
+    try {
+      const response = await fetch('/api/settings', { credentials: 'include' });
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && contentType.includes('application/json')) {
+        const data = await response.json();
+        setSettings(data);
+      } else {
+        setSettings({});
+      }
+    } catch (err) {
+      console.error('fetchSettings error:', err);
+      setSettings({});
+    }
+  }
+
   async function handleLogout() {
     try {
       await fetch('/api/logout', {
@@ -87,7 +108,7 @@ function App() {
   }
 
   // Angemeldet - Dashboard mit Admin-Tab für Admins
-  return <Dashboard user={user} onLogout={handleLogout} isAdmin={user.role === 'admin'} logo={logo} />;
+  return <Dashboard user={user} onLogout={handleLogout} isAdmin={user.role === 'admin'} logo={logo} initialSettings={settings} />;
 }
 
 export default App;

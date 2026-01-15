@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import './Dashboard.css';
 import PhotoEditor from './PhotoEditor';
 
-export default function Dashboard({ user, onLogout, isAdmin }) {
+export default function Dashboard({ user, onLogout, isAdmin, initialSettings }) {
   const [userDetails, setUserDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('upload'); // 'upload', 'photos', 'admin'
@@ -44,6 +44,16 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
   // Description Font Settings
   const [descriptionFontId, setDescriptionFontId] = useState(null);
   const [descriptionFontSize, setDescriptionFontSize] = useState(60);
+
+  // Initialize from global settings if provided
+  useEffect(() => {
+    if (initialSettings) {
+      if (initialSettings.titleFontId !== undefined) setTitleFontId(initialSettings.titleFontId);
+      if (initialSettings.titleFontSize !== undefined) setTitleFontSize(initialSettings.titleFontSize);
+      if (initialSettings.descriptionFontId !== undefined) setDescriptionFontId(initialSettings.descriptionFontId);
+      if (initialSettings.descriptionFontSize !== undefined) setDescriptionFontSize(initialSettings.descriptionFontSize);
+    }
+  }, [initialSettings]);
 
   // Photo Editor States
   const [editorOpen, setEditorOpen] = useState(false);
@@ -523,6 +533,34 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
     }
   }
 
+  async function saveFontSettings() {
+    try {
+      const payload = {
+        titleFontId: titleFontId,
+        titleFontSize: titleFontSize,
+        descriptionFontId: descriptionFontId,
+        descriptionFontSize: descriptionFontSize
+      };
+      const response = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
+      if (response.ok) {
+        setMessage('✓ Einstellungen gespeichert!');
+        // Notify other windows/components to reload settings
+        try { window.dispatchEvent(new Event('settingsUpdated')); } catch (e) {}
+        setTimeout(() => setMessage(''), 2000);
+      } else {
+        const data = await response.json();
+        setMessage('❌ ' + (data.error || 'Fehler beim Speichern'));
+      }
+    } catch (error) {
+      setMessage('❌ Fehler: ' + error.message);
+    }
+  }
+
   async function handleLogoUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -585,13 +623,13 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
   return (
     <div className="dashboard-container">
       <div className="dashboard-navbar">
-        <h1 style={{display:'flex',alignItems:'center',gap:'10px'}}>
+        <div className="logo-center">
           {logo && logo.url ? (
-            <img src={logo.url} alt="Logo" style={{height:'40px',verticalAlign:'middle'}} />
+            <img src={logo.url} alt="Logo" className="site-logo" />
           ) : (
-            'HTLMedia'
+            <span className="site-title">HTLMedia</span>
           )}
-        </h1>
+        </div>
         <div className="navbar-tabs">
           <button 
             className={`nav-tab ${activeTab === 'upload' ? 'active' : ''}`}
@@ -1159,6 +1197,9 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
                     className="font-size-slider"
                   />
                 </div>
+                  <div className="settings-actions">
+                    <button className="btn-save-settings" onClick={saveFontSettings}>Einstellungen speichern</button>
+                  </div>
               </div>
 
               <div className="description-font-settings">
