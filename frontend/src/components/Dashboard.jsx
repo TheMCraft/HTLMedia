@@ -493,12 +493,27 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
       const response = await fetch('/api/logo', {
         credentials: 'include'
       });
-      const data = await response.json();
+      const contentType = response.headers.get('content-type') || '';
       if (response.ok) {
-        setLogo(data);
-        setLogoMessage('');
+        if (contentType.includes('application/json')) {
+          const data = await response.json();
+          setLogo(data);
+          setLogoMessage('');
+        } else {
+          const text = await response.text();
+          console.error('fetchLogo (Dashboard): expected JSON but got:', text.slice(0, 500));
+          setLogo(null);
+          setLogoMessage('❌ Unerwartete Antwort vom Server');
+        }
       } else {
-        setLogoMessage('❌ ' + (data.error || 'Fehler beim Laden'));
+        if (contentType.includes('application/json')) {
+          const data = await response.json();
+          setLogoMessage('❌ ' + (data.error || 'Fehler beim Laden'));
+        } else {
+          const text = await response.text();
+          console.error('fetchLogo (Dashboard) non-OK response (not JSON):', text.slice(0, 500));
+          setLogoMessage('❌ Unerwartete Antwort vom Server');
+        }
       }
     } catch (error) {
       console.error('Fehler beim Laden des Logos:', error);
@@ -570,7 +585,13 @@ export default function Dashboard({ user, onLogout, isAdmin }) {
   return (
     <div className="dashboard-container">
       <div className="dashboard-navbar">
-        <h1>🎬 HTLMedia</h1>
+        <h1 style={{display:'flex',alignItems:'center',gap:'10px'}}>
+          {logo && logo.url ? (
+            <img src={logo.url} alt="Logo" style={{height:'40px',verticalAlign:'middle'}} />
+          ) : (
+            'HTLMedia'
+          )}
+        </h1>
         <div className="navbar-tabs">
           <button 
             className={`nav-tab ${activeTab === 'upload' ? 'active' : ''}`}

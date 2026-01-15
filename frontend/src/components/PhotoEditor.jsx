@@ -2,6 +2,23 @@ import { useState, useEffect, useRef } from 'react';
 import './PhotoEditor.css';
 
 export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleFontId, titleFontSize, descriptionFontId, descriptionFontSize, fonts, logo }) {
+  // Admin-Font global setzen
+  useEffect(() => {
+    if (titleFontId && fonts && fonts.length > 0) {
+      const selectedFont = fonts.find(f => f.id === titleFontId);
+      if (selectedFont) {
+        const fontName = selectedFont.filename.substring(0, selectedFont.filename.lastIndexOf('.')) || selectedFont.filename;
+        setTitleFont({ name: fontName, size: titleFontSize });
+      }
+    }
+    if (descriptionFontId && fonts && fonts.length > 0) {
+      const selectedFont = fonts.find(f => f.id === descriptionFontId);
+      if (selectedFont) {
+        const fontName = selectedFont.filename.substring(0, selectedFont.filename.lastIndexOf('.')) || selectedFont.filename;
+        setDescriptionFont({ name: fontName, size: descriptionFontSize });
+      }
+    }
+  }, [titleFontId, titleFontSize, descriptionFontId, descriptionFontSize, fonts]);
   const canvasRef = useRef(null);
   const [imageFormat, setImageFormat] = useState(''); // 'vertical' oder 'horizontal'
   const [overlays, setOverlays] = useState([]);
@@ -233,10 +250,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
   useEffect(() => {
     if (imageFormat) {
       fetchOverlays(imageFormat).then(() => {
-        // Nach dem Laden der Overlays die Canvas-Größe anpassen
-        if (overlays.length > 0) {
-          adjustCanvasToOverlay(overlays[0]);
-        }
+        // Do not auto-resize canvas to overlay here — keep canvas size tied to the photo
       });
     }
   }, [imageFormat]);
@@ -635,10 +649,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
         setHistory(newHistory);
         setHistoryIndex(newHistory.length - 1);
 
-        // Canvas an das Overlay anpassen
-        adjustCanvasToOverlay(overlayImg);
-
-        // Wenn Overlay horizontal ist, Bild auf y=467 positionieren
+        // Do not resize canvas to the overlay image; only position the photo when needed
         if (overlay.overlayType === 'horizontal') {
           setImageTransform(prev => ({ ...prev, y: 467 }));
         }
@@ -991,55 +1002,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
             )}
           </div>
 
-          <div className="sidebar-section">
-            <h3>🎨 Logo</h3>
-            
-            {logoImg ? (
-              <div className="logo-controls">
-                <p className="selector-label">Logo-Position:</p>
-                <div className="logo-position-settings">
-                  <label>
-                    X: <input 
-                      type="number" 
-                      value={logoPosition.x} 
-                      onChange={(e) => {
-                        const newPos = {...logoPosition, x: parseInt(e.target.value) || 0};
-                        setLogoPosition(newPos);
-                      }}
-                      className="position-input"
-                    />px
-                  </label>
-                  <label>
-                    Y: <input 
-                      type="number" 
-                      value={logoPosition.y} 
-                      onChange={(e) => {
-                        const newPos = {...logoPosition, y: parseInt(e.target.value) || 0};
-                        setLogoPosition(newPos);
-                      }}
-                      className="position-input"
-                    />px
-                  </label>
-                  <label>
-                    Größe: <input 
-                      type="range"
-                      min="0.05"
-                      max="0.5"
-                      step="0.05"
-                      value={logoPosition.scale}
-                      onChange={(e) => {
-                        const newPos = {...logoPosition, scale: parseFloat(e.target.value)};
-                        setLogoPosition(newPos);
-                      }}
-                      className="scale-slider"
-                    /> {(logoPosition.scale * 100).toFixed(0)}%
-                  </label>
-                </div>
-              </div>
-            ) : (
-              <p className="no-logo">Kein Logo vorhanden. Bitte im Admin-Panel hochladen.</p>
-            )}
-          </div>
+          {/* Logo-Auswahl entfernt, Logo wird nicht mehr im Editor angezeigt */}
 
           <div className="sidebar-section">
             <h3>📝 Titel hinzufügen</h3>

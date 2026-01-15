@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import './Login.css';
 
-export default function Login({ onLoginSuccess }) {
+export default function Login({ onLoginSuccess, logo }) {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -105,7 +105,13 @@ export default function Login({ onLoginSuccess }) {
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <h1>🎬 HTLMedia</h1>
+          <h1 style={{display:'flex',alignItems:'center',gap:'10px'}}>
+            {logo && logo.url ? (
+              <img src={logo.url} alt="Logo" style={{height:'40px',verticalAlign:'middle'}} />
+            ) : (
+              'HTLMedia'
+            )}
+          </h1>
           <p>{isLogin ? 'Willkommen' : 'Registrieren'}</p>
         </div>
 
