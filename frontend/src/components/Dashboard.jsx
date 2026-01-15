@@ -271,8 +271,20 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
         const totalSize = data.reduce((sum, p) => sum + (p.size || 0), 0);
         setGlobalStats({ count: data.length, size: totalSize });
 
-        // Keine Gruppierung - jede Version als eigenes Bild anzeigen
-        setAllPhotos(data);
+        // Gruppieren: Nur die neueste Version jedes Bildes anzeigen
+        const grouped = data.reduce((acc, photo) => {
+          const key = photo.original_filename;
+          if (!acc[key] || photo.version > acc[key].version) {
+            acc[key] = photo;
+          }
+          return acc;
+        }, {});
+        
+        setAllPhotos(
+          Object.values(grouped).sort((a, b) => 
+            new Date(b.created_at) - new Date(a.created_at)
+          )
+        );
       }
     } catch (error) {
       console.error('Fehler beim Laden aller Fotos:', error);
