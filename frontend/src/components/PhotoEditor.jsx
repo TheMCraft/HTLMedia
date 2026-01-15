@@ -77,8 +77,18 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
   // Update description font wenn Admin settings oder lokale Auswahl sich ändern
   useEffect(() => {
     const run = async () => {
-      const savedFonts = localStorage.getItem('app_fonts');
-      const fSource = (fonts && fonts.length > 0) ? fonts : (savedFonts ? JSON.parse(savedFonts) : []);
+      // Wait for fonts to be loaded via props.
+      if (!fonts || fonts.length === 0) {
+        console.log('Description Font Effect: Fonts not loaded yet, waiting.');
+        // We might still want to set a fallback if no font is ever selected.
+        const targetId = localDescriptionFontId || descriptionFontId;
+        if (!targetId) {
+            setDescriptionFont({ name: 'serif', size: localDescriptionFontSize || descriptionFontSize || 60 });
+        }
+        return;
+      }
+
+      const fSource = fonts; // No localStorage fallback
       
       const targetId = localDescriptionFontId || descriptionFontId;
       const targetSize = localDescriptionFontSize || descriptionFontSize || 60;
@@ -94,11 +104,6 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
         }
       }
       
-      if (targetId && fSource.length === 0) {
-        console.log('Description Font ID present but fonts list empty. Waiting...');
-        return;
-      }
-
       setDescriptionFont({ name: 'serif', size: targetSize });
     };
 
@@ -109,9 +114,19 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
   useEffect(() => {
     const run = async () => {
       console.log('Title Font Effect triggered - localTitleFontId:', localTitleFontId, 'curr fonts prop len:', fonts?.length);
+
+      // Wait for fonts to be loaded via props.
+      if (!fonts || fonts.length === 0) {
+        console.log('Title Font Effect: Fonts not loaded yet, waiting.');
+        // We might still want to set a fallback if no font is ever selected.
+        const targetId = localTitleFontId || titleFontId;
+        if (!targetId) {
+            setTitleFont({ name: 'serif', size: localTitleFontSize || titleFontSize || 70 });
+        }
+        return;
+      }
       
-      const savedFonts = localStorage.getItem('app_fonts');
-      const fSource = (fonts && fonts.length > 0) ? fonts : (savedFonts ? JSON.parse(savedFonts) : []);
+      const fSource = fonts; // No localStorage fallback
       
       const targetId = localTitleFontId || titleFontId;
       const targetSize = localTitleFontSize || titleFontSize || 70;
@@ -125,11 +140,6 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
           console.log(`Title Font aktualisiert: ${fontName}, Größe: ${targetSize}`);
           return;
         }
-      }
-
-      if (targetId && fSource.length === 0) {
-        console.log('Title Font ID present but NO fonts found in prop or localStorage. Waiting...');
-        return;
       }
 
       console.log('Title Font Fallback zu serif');
