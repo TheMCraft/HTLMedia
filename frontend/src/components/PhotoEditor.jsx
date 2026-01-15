@@ -66,6 +66,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
   const [localTitleFontSize, setLocalTitleFontSize] = useState(titleFontSize || 70);
   const [localDescriptionFontId, setLocalDescriptionFontId] = useState(descriptionFontId);
   const [localDescriptionFontSize, setLocalDescriptionFontSize] = useState(descriptionFontSize || 60);
+  const [moveStep, setMoveStep] = useState(1); // 1%
 
   const imgRef = useRef(null);
   const canvasContainerRef = useRef(null);
@@ -948,7 +949,21 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
     if (selectedElementIndex === -1) {
       // Bild ist ausgewählt
       setImageTransform(prev => ({ ...prev, ...changes }));
-    } else {
+    } else if (selectedElementIndex === -2) {
+      // Titel ist ausgewählt
+      if (appliedTitle) {
+        const newTitle = { ...appliedTitle, ...changes };
+        setAppliedTitle(newTitle);
+        if (changes.y !== undefined) setTitleY(changes.y);
+      }
+    } else if (selectedElementIndex === -3) {
+      // Beschreibung ist ausgewählt
+      if (appliedDescription) {
+        const newDesc = { ...appliedDescription, ...changes };
+        setAppliedDescription(newDesc);
+        if (changes.y !== undefined) setDescriptionY(changes.y);
+      }
+    } else if (selectedElementIndex >= 0) {
       // Overlay ist ausgewählt
       const newOverlays = [...appliedOverlays];
       newOverlays[selectedElementIndex] = { ...newOverlays[selectedElementIndex], ...changes };
@@ -957,19 +972,59 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
   }
 
   function handleMoveUp() {
-    updateSelectedElement({ y: (selectedElementIndex === -1 ? imageTransform.y : appliedOverlays[selectedElementIndex]?.y || 0) - 10 });
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const step = (canvas.height * moveStep) / 100;
+    
+    let currentY = 0;
+    if (selectedElementIndex === -1) currentY = imageTransform.y;
+    else if (selectedElementIndex === -2) currentY = appliedTitle?.y || 0;
+    else if (selectedElementIndex === -3) currentY = appliedDescription?.y || 0;
+    else if (selectedElementIndex >= 0) currentY = appliedOverlays[selectedElementIndex]?.y || 0;
+    
+    updateSelectedElement({ y: currentY - step });
   }
 
   function handleMoveDown() {
-    updateSelectedElement({ y: (selectedElementIndex === -1 ? imageTransform.y : appliedOverlays[selectedElementIndex]?.y || 0) + 10 });
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const step = (canvas.height * moveStep) / 100;
+    
+    let currentY = 0;
+    if (selectedElementIndex === -1) currentY = imageTransform.y;
+    else if (selectedElementIndex === -2) currentY = appliedTitle?.y || 0;
+    else if (selectedElementIndex === -3) currentY = appliedDescription?.y || 0;
+    else if (selectedElementIndex >= 0) currentY = appliedOverlays[selectedElementIndex]?.y || 0;
+    
+    updateSelectedElement({ y: currentY + step });
   }
 
   function handleMoveLeft() {
-    updateSelectedElement({ x: (selectedElementIndex === -1 ? imageTransform.x : appliedOverlays[selectedElementIndex]?.x || 0) - 10 });
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const step = (canvas.width * moveStep) / 100;
+    
+    let currentX = 0;
+    if (selectedElementIndex === -1) currentX = imageTransform.x;
+    else if (selectedElementIndex === -2) currentX = appliedTitle?.x || 0;
+    else if (selectedElementIndex === -3) currentX = appliedDescription?.x || 0;
+    else if (selectedElementIndex >= 0) currentX = appliedOverlays[selectedElementIndex]?.x || 0;
+    
+    updateSelectedElement({ x: currentX - step });
   }
 
   function handleMoveRight() {
-    updateSelectedElement({ x: (selectedElementIndex === -1 ? imageTransform.x : appliedOverlays[selectedElementIndex]?.x || 0) + 10 });
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const step = (canvas.width * moveStep) / 100;
+    
+    let currentX = 0;
+    if (selectedElementIndex === -1) currentX = imageTransform.x;
+    else if (selectedElementIndex === -2) currentX = appliedTitle?.x || 0;
+    else if (selectedElementIndex === -3) currentX = appliedDescription?.x || 0;
+    else if (selectedElementIndex >= 0) currentX = appliedOverlays[selectedElementIndex]?.x || 0;
+    
+    updateSelectedElement({ x: currentX + step });
   }
 
   function handleZoomIn() {
@@ -1199,14 +1254,6 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
                   <option key={font.id} value={font.id}>{font.filename}</option>
                 ))}
               </select>
-              <div className="size-slider-mini">
-                <span>Größe: {localTitleFontSize}px</span>
-                <input 
-                  type="range" min="20" max="150" 
-                  value={localTitleFontSize} 
-                  onChange={(e) => setLocalTitleFontSize(parseInt(e.target.value))}
-                />
-              </div>
             </div>
 
             {!showTitleInput ? (
@@ -1261,24 +1308,6 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
                     🗑️
                   </button>
                 </div>
-                
-                <div className="title-controls">
-                  <p className="selector-label">Y-Position des Textes:</p>
-                  <input 
-                    type="range"
-                    min="0"
-                    max={canvasRef.current?.height || 600}
-                    value={titleY}
-                    onChange={(e) => {
-                      const newY = parseInt(e.target.value);
-                      setTitleY(newY);
-                      const updatedTitle = { ...appliedTitle, y: newY };
-                      setAppliedTitle(updatedTitle);
-                    }}
-                    className="title-slider"
-                  />
-                  <span className="value-display">{titleY}px von oben</span>
-                </div>
               </div>
             )}
           </div>
@@ -1297,14 +1326,6 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
                   <option key={font.id} value={font.id}>{font.filename}</option>
                 ))}
               </select>
-              <div className="size-slider-mini">
-                <span>Größe: {localDescriptionFontSize}px</span>
-                <input 
-                  type="range" min="10" max="100" 
-                  value={localDescriptionFontSize} 
-                  onChange={(e) => setLocalDescriptionFontSize(parseInt(e.target.value))}
-                />
-              </div>
             </div>
             
             {!showDescriptionInput ? (
@@ -1358,24 +1379,6 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
                     🗑️
                   </button>
                 </div>
-                
-                <div className="description-controls">
-                  <p className="selector-label">Y-Position des Textes:</p>
-                  <input 
-                    type="range"
-                    min="0"
-                    max={canvasRef.current?.height || 600}
-                    value={descriptionY}
-                    onChange={(e) => {
-                      const newY = parseInt(e.target.value);
-                      setDescriptionY(newY);
-                      const updatedDescription = { ...appliedDescription, y: newY };
-                      setAppliedDescription(updatedDescription);
-                    }}
-                    className="description-slider"
-                  />
-                  <span className="value-display">{descriptionY}px von oben</span>
-                </div>
               </div>
             )}
           </div>
@@ -1391,6 +1394,22 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
               >
                 📷 Bild
               </button>
+              {appliedTitle && (
+                <button 
+                  className={`selector-btn ${selectedElementIndex === -2 ? 'active' : ''}`}
+                  onClick={() => setSelectedElementIndex(-2)}
+                >
+                  📝 Titel
+                </button>
+              )}
+              {appliedDescription && (
+                <button 
+                  className={`selector-btn ${selectedElementIndex === -3 ? 'active' : ''}`}
+                  onClick={() => setSelectedElementIndex(-3)}
+                >
+                  📄 Text
+                </button>
+              )}
               {appliedOverlays.map((_, idx) => (
                 <button 
                   key={idx}
@@ -1412,11 +1431,17 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
               <button className="arrow-btn down" onClick={handleMoveDown} title="Nach unten">▼</button>
             </div>
 
-            <p className="selector-label">Größe:</p>
-            <div className="zoom-buttons">
-              <button className="zoom-btn" onClick={handleZoomOut} title="Verkleinern">−</button>
-              <span className="zoom-value">{Math.round((selectedElementIndex === -1 ? imageTransform.scale : (appliedOverlays[selectedElementIndex]?.scale || 1)) * 100)}%</span>
-              <button className="zoom-btn" onClick={handleZoomIn} title="Vergrößern">+</button>
+            <div className="step-selector">
+              <p className="selector-label">Schrittweite (%):</p>
+              <input 
+                type="number" 
+                min="0.1" 
+                max="50" 
+                step="0.1"
+                value={moveStep}
+                onChange={(e) => setMoveStep(parseFloat(e.target.value) || 0)}
+                className="step-input"
+              />
             </div>
           </div>
 

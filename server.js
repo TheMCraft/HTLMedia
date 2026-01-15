@@ -623,6 +623,33 @@ app.post('/api/admin/users/:id/reset-password', requireAdmin, async (req, res) =
   }
 });
 
+// GET: Alle Fotos aller Benutzer (Admin only)
+app.get('/api/admin/photos', requireAdmin, async (req, res) => {
+  try {
+    const connection = await dbPool.getConnection();
+    try {
+      const [photos] = await connection.execute(
+        `SELECT p.id, p.filename, p.original_filename, p.version, p.finished, p.created_at, u.username 
+         FROM photos p 
+         JOIN users u ON p.user_id = u.id 
+         ORDER BY p.created_at DESC`
+      );
+      
+      const photosWithUrl = photos.map(photo => ({
+        ...photo,
+        finished: photo.finished === 1,
+        url: `/uploads/${photo.filename}`
+      }));
+      
+      res.json(photosWithUrl);
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Photo Endpoints
 // GET: Alle Fotos des Benutzers
 app.get('/api/photos', requireLogin, async (req, res) => {
@@ -714,13 +741,20 @@ app.post('/api/photos/version', requireLogin, upload.single('photo'), async (req
   }
 
   try {
+    const isAdmin = req.session.role === 'admin';
     const connection = await dbPool.getConnection();
     try {
       // Original-Foto abrufen
-      const [originalPhotos] = await connection.execute(
-        'SELECT id, original_filename, version FROM photos WHERE id = ? AND user_id = ?',
-        [originalPhotoId, req.session.userId]
-      );
+      // Admins dürfen Versionen für alle Fotos erstellen
+      let query = 'SELECT id, user_id, original_filename, version FROM photos WHERE id = ?';
+      let params = [originalPhotoId];
+      
+      if (!isAdmin) {
+        query += ' AND user_id = ?';
+        params.push(req.session.userId);
+      }
+
+      const [originalPhotos] = await connection.execute(query, params);
 
       if (originalPhotos.length === 0) {
         // Datei löschen wenn Photo nicht gefunden
@@ -737,10 +771,11 @@ app.post('/api/photos/version', requireLogin, upload.single('photo'), async (req
       const isFinished = req.body.finished === 'true';
 
       // Neue Version speichern
+      // Wir behalten die ursprüngliche user_id bei, auch wenn ein Admin editiert
       await connection.execute(
         'INSERT INTO photos (user_id, filename, original_filename, mime_type, size, version, finished) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [
-          req.session.userId,
+          originalPhoto.user_id,
           req.file.filename,
           originalPhoto.original_filename,
           req.file.mimetype,
@@ -774,13 +809,20 @@ app.post('/api/photos/version', requireLogin, upload.single('photo'), async (req
 // DELETE: Foto löschen
 app.delete('/api/photos/:id', requireLogin, async (req, res) => {
   try {
+    const isAdmin = req.session.role === 'admin';
     const connection = await dbPool.getConnection();
     try {
       // Foto von DB abrufen (um Dateiname zu kennen)
-      const [photos] = await connection.execute(
-        'SELECT filename FROM photos WHERE id = ? AND user_id = ?',
-        [req.params.id, req.session.userId]
-      );
+      // Admins dürfen alles löschen, User nur ihre eigenen
+      let query = 'SELECT filename FROM photos WHERE id = ?';
+      let params = [req.params.id];
+      
+      if (!isAdmin) {
+        query += ' AND user_id = ?';
+        params.push(req.session.userId);
+      }
+
+      const [photos] = await connection.execute(query, params);
 
       if (photos.length === 0) {
         return res.status(404).json({ error: 'Foto nicht gefunden' });
@@ -789,10 +831,15 @@ app.delete('/api/photos/:id', requireLogin, async (req, res) => {
       const filename = photos[0].filename;
 
       // Aus DB löschen
-      await connection.execute(
-        'DELETE FROM photos WHERE id = ? AND user_id = ?',
-        [req.params.id, req.session.userId]
-      );
+      let deleteQuery = 'DELETE FROM photos WHERE id = ?';
+      let deleteParams = [req.params.id];
+
+      if (!isAdmin) {
+        deleteQuery += ' AND user_id = ?';
+        deleteParams.push(req.session.userId);
+      }
+
+      await connection.execute(deleteQuery, deleteParams);
 
       // Datei löschen
       const filePath = path.join(uploadsDir, filename);

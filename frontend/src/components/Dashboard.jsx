@@ -16,6 +16,7 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
     role: 'user'
   });
   const [photos, setPhotos] = useState([]);
+  const [allPhotos, setAllPhotos] = useState([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoMessage, setPhotoMessage] = useState('');
   
@@ -70,6 +71,9 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
       fetchOverlays();
       // fetchFonts(); // redundant now
       fetchLogo();
+    }
+    if (activeTab === 'all_photos' && isAdmin) {
+      fetchAllPhotos();
     }
   }, [activeTab, isAdmin]);
 
@@ -216,6 +220,7 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
     setEditorOpen(false);
     setSelectedPhotoForEdit(null);
     fetchUserPhotos(); // Fotos neuladen um neue Versionen anzuzeigen
+    if (isAdmin) fetchAllPhotos();
   }
 
   async function fetchUserPhotos() {
@@ -244,6 +249,20 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
       }
     } catch (error) {
       console.error('Fehler beim Laden der Fotos:', error);
+    }
+  }
+
+  async function fetchAllPhotos() {
+    try {
+      const response = await fetch('/api/admin/photos', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAllPhotos(data);
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden aller Fotos:', error);
     }
   }
 
@@ -293,6 +312,7 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
       if (response.ok) {
         setPhotoMessage('✓ Foto gelöscht!');
         fetchUserPhotos();
+        if (isAdmin) fetchAllPhotos();
       } else {
         const data = await response.json();
         setPhotoMessage('❌ ' + (data.error || 'Fehler beim Löschen'));
@@ -636,15 +656,23 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
             📸 Meine Fotos ({photos.length})
           </button>
           {isAdmin && (
-            <button 
-              className={`nav-tab ${activeTab === 'admin' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('admin');
-                if (users.length === 0) fetchUsers();
-              }}
-            >
-              🛡️ Admin Panel
-            </button>
+            <>
+              <button 
+                className={`nav-tab ${activeTab === 'all_photos' ? 'active' : ''}`}
+                onClick={() => setActiveTab('all_photos')}
+              >
+                🌐 Alle Bilder ({allPhotos.length})
+              </button>
+              <button 
+                className={`nav-tab ${activeTab === 'admin' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('admin');
+                  if (users.length === 0) fetchUsers();
+                }}
+              >
+                🛡️ Admin Panel
+              </button>
+            </>
           )}
         </div>
         <div className="navbar-right">
@@ -773,6 +801,80 @@ export default function Dashboard({ user, onLogout, isAdmin, initialSettings, fo
               ) : (
                 <div className="card">
                   <p className="no-photos">Noch keine Fotos hochgeladen</p>
+                </div>
+              )}
+            </div>
+          </>
+        ) : activeTab === 'all_photos' ? (
+          <>
+            <div className="welcome-banner">
+              <h2>🌐 Alle Fotos <span>({allPhotos.length})</span></h2>
+              <p>Alle hochgeladenen Fotos aller Benutzer</p>
+            </div>
+
+            <div className="photos-container">
+              {allPhotos.length > 0 ? (
+                <div className="photos-grid">
+                  {allPhotos.map((photo) => (
+                    <div key={photo.id} className="photo-item">
+                      <div 
+                        className="photo-image-wrapper"
+                        onClick={() => handleOpenEditor(photo)}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <img 
+                          src={photo.url} 
+                          alt={`Foto ${photo.id}`}
+                          className="photo-image"
+                        />
+                        <div className="photo-overlay-hint">
+                          <span className="edit-icon">✏️ Bearbeiten</span>
+                        </div>
+                      </div>
+                      <div className="photo-info">
+                        <div className="photo-meta">
+                          <span className="meta-label">User:</span> {photo.username}
+                        </div>
+                        <div className="photo-meta">
+                          <span className="meta-label">ID:</span> {photo.id}
+                        </div>
+                        <div className="photo-meta">
+                          <span className="meta-label">Version:</span> {photo.version}
+                        </div>
+                        <div className="photo-meta">
+                          <span className="meta-label">Datum:</span> {new Date(photo.created_at).toLocaleDateString('de-DE')}
+                        </div>
+                        {photo.finished && (
+                          <div className="photo-meta" style={{color: '#9c27b0', fontWeight: 'bold'}}>
+                            ✓ Fertig markiert
+                          </div>
+                        )}
+                        <div className="photo-actions">
+                          {photo.finished && (
+                            <button 
+                              className="btn-download-photo"
+                              onClick={() => handleDownloadPhoto(photo)}
+                              title="Fertiges Foto herunterladen"
+                            >
+                              ⬇️ Herunterladen
+                            </button>
+                          )}
+                          <button 
+                            className="btn-delete-photo"
+                            onClick={() => handleDeletePhoto(photo.id)}
+                            title="Foto löschen"
+                          >
+                            🗑️ Löschen
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="card">
+                  <p className="no-photos">Noch keine Fotos im System</p>
                 </div>
               )}
             </div>
