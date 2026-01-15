@@ -709,6 +709,49 @@
   border-color: #ff4c4c;
 }
 
+.title-display {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 10px;
+}
+
+.title-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 5px;
+}
+
+.title-preview {
+  flex: 1;
+  color: #e0e0e0;
+  font-size: 13px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.btn-delete-title {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn-delete-title:hover {
+  color: #ff6b6b;
+  transform: scale(1.1);
+}
+
 .description-display {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.1);

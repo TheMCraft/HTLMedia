@@ -614,7 +614,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
           ctx.fillStyle = '#FFFFFF';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
-          ctx.fillText(appliedTitle.text, appliedTitle.x, appliedTitle.y);
+          drawWrappedText(ctx, appliedTitle.text, appliedTitle.x, appliedTitle.y, canvas.width - 40, appliedTitle.fontSize, appliedTitle.font, '#FFFFFF');
         }
         
         // Zeichne Description NACH Title
@@ -628,11 +628,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
 
     // Title zeichnen wenn keine Overlays vorhanden sind
     if (appliedTitle) {
-      ctx.font = `${appliedTitle.fontSize}px ${appliedTitle.font}`;
-      ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText(appliedTitle.text, appliedTitle.x, appliedTitle.y);
+      drawWrappedText(ctx, appliedTitle.text, appliedTitle.x, appliedTitle.y, canvas.width - 40, appliedTitle.fontSize, appliedTitle.font, '#FFFFFF');
     }
     
     // Description zeichnen
@@ -651,8 +647,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
     const lines = [];
     let currentLine = '';
     
-    // Text wrapping auf maximal 2 Zeilen
-    for (let i = 0; i < words.length && lines.length < 2; i++) {
+    for (let i = 0; i < words.length; i++) {
       const testLine = currentLine + (currentLine ? ' ' : '') + words[i];
       const metrics = ctx.measureText(testLine);
       
@@ -662,25 +657,10 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
       } else {
         currentLine = testLine;
       }
-      
-      // Wenn wir auf der 2. Zeile sind und noch Wörter übrig, add "..."
-      if (lines.length === 1 && i === words.length - 1) {
-        lines.push(currentLine);
-      } else if (lines.length === 1 && i < words.length - 1) {
-        const nextTest = currentLine + ' ' + words[i + 1];
-        const nextMetrics = ctx.measureText(nextTest);
-        if (nextMetrics.width > maxWidth && currentLine) {
-          lines.push(currentLine);
-          currentLine = '';
-        }
-      }
     }
     
-    if (currentLine && lines.length < 2) {
+    if (currentLine) {
       lines.push(currentLine);
-    } else if (lines.length === 2 && currentLine) {
-      // Wenn noch Text übrig ist und wir schon 2 Zeilen haben, kürzbar-Zeichen hinzufügen
-      lines[1] = lines[1].substring(0, lines[1].length - 3) + '...';
     }
     
     // Zeichne die Zeilen
@@ -1055,11 +1035,7 @@ export default function PhotoEditor({ photoId, photoUrl, onClose, onSave, titleF
 
     // Title zeichnen
     if (appliedTitle) {
-      ctx.font = `${appliedTitle.fontSize}px ${appliedTitle.font}`;
-      ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText(appliedTitle.text, appliedTitle.x, appliedTitle.y);
+      drawWrappedText(ctx, appliedTitle.text, appliedTitle.x, appliedTitle.y, exportCanvas.width - 40, appliedTitle.fontSize, appliedTitle.font, '#FFFFFF');
     }
 
     // Description zeichnen
